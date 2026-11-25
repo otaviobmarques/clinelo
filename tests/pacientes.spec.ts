@@ -42,7 +42,7 @@ test("cadastra, busca, edita e arquiva sem expor o cadastro a outra clínica", a
     expect((await member.rpc("patient_change", { p_clinic: clinicA, p_action: "archive", p_id: patient,
       p_revision: before?.revision })).error?.code).toBe("P0001");
 
-    await page.getByRole("searchbox", { name: "Buscar por nome" }).fill("JOAO " + "FICTICIO " + suffix);
+    await page.getByRole("searchbox", { name: "Buscar por nome, telefone ou e-mail" }).fill("JOAO " + "FICTICIO " + suffix);
     await page.getByRole("button", { name: "Buscar", exact: true }).click();
     await expect(page).toHaveURL(/[?&]q=/);
     await expect(page.getByRole("link", { name: updated, exact: true })).toBeVisible();
@@ -124,6 +124,76 @@ test("agenda um paciente da caixa e preserva os dois vínculos no histórico", a
     unwrap(await stack.admin.from("appointments").delete().eq("patient_id", patient));
     unwrap(await stack.admin.from("patients").delete().eq("id", patient));
     unwrap(await stack.admin.from("inbox_threads").delete().eq("id", thread));
+    await stack.removeUser(user);
+  }
+});
+
+test("localiza por contato e vincula ou desvincula uma consulta antiga", async ({ page }) => {
+  const stack = localStack();
+  const user = await stack.user(clinicA, "vinculo-legado");
+  const appointment = randomUUID();
+  const patient = randomUUID();
+  const homonym = randomUUID();
+  const name = "Pessoa Fictícia " + appointment;
+  const email = patient + "@example.test";
+  const lastWeek = new Date();
+  lastWeek.setUTCDate(lastWeek.getUTCDate() - 35);
+  const day = lastWeek.toISOString().slice(0, 10);
+
+  try {
+    unwrap(await stack.admin.from("patients").insert([
+      { id: patient, clinic_id: clinicA, name, phone: "+5500000000000", email },
+      { id: homonym, clinic_id: clinicA, name, email: homonym + "@example.test" },
+    ]));
+    unwrap(await stack.admin.from("appointments").insert({
+      id: appointment, clinic_id: clinicA, professional_id: professionalA, patient_name: name,
+      starts_at: day + "T11:00:00Z", ends_at: day + "T11:30:00Z",
+    }));
+    const member = stack.client();
+    expect((await member.auth.signInWithPassword({ email: user.email, password: user.password })).error).toBeNull();
+    unwrap(await member.rpc("agenda_set_status", {
+      p_clinic: clinicA, p_appointment: appointment, p_revision: 0, p_status: "attended",
+    }));
+
+    await enter(page, user);
+    await page.goto(`/?day=${day}&agendaProfessional=${professionalA}`);
+    const visit = page.getByRole("article").filter({ hasText: name });
+    await visit.getByRole("link", { name: "Vincular à ficha" }).click();
+    const search = page.getByRole("searchbox", { name: "Buscar por nome, telefone ou e-mail" });
+    await search.fill("+55 (00) 00000-0000");
+    await page.getByRole("button", { name: "Buscar", exact: true }).click();
+    const directory = page.getByRole("region", { name: "Cadastros da clínica" });
+    await expect(directory.getByRole("link", { name, exact: true })).toHaveCount(1);
+    await search.fill(email.toUpperCase());
+    await page.getByRole("button", { name: "Buscar", exact: true }).click();
+    await expect(page).toHaveURL(/q=.*%40EXAMPLE.TEST/);
+    await expect(directory.getByRole("link", { name, exact: true })).toHaveCount(1);
+    await directory.getByRole("link", { name, exact: true }).click();
+    await page.getByRole("button", { name: "Confirmar vínculo desta consulta" }).click();
+    await expect(page.getByRole("status")).toHaveText("Consulta vinculada à ficha.");
+    const history = page.getByRole("region", { name: "Consultas de " + name });
+    await expect(history.getByText(/Atendido/)).toBeVisible();
+
+    const link = (p_patient: string, p_revision: number, p_clinic = clinicA) => member.rpc("patient_link_visit", {
+      p_clinic, p_patient, p_appointment: appointment, p_revision,
+    });
+    expect((await link(homonym, 2)).error?.code).toBe("P0001");
+    expect((await link(homonym, 2, clinicB)).error?.code).toBe("42501");
+    unwrap(await member.rpc("agenda_undo_attendance", { p_clinic: clinicA, p_appointment: appointment, p_revision: 2 }));
+
+    await history.getByRole("link", { name: /08:00/ }).click();
+    await visit.getByRole("link", { name: "Ver histórico" }).click();
+    await expect(page.getByText("Consulta vinculada a uma ficha", { exact: true })).toBeVisible();
+    await visit.getByRole("link", { name: "Ver ficha do paciente" }).click();
+    await history.getByText("Desvincular consulta", { exact: true }).click();
+    await history.getByRole("button", { name: "Confirmar desvinculação" }).click();
+    await expect(page.getByRole("status")).toHaveText("Consulta desvinculada da ficha.");
+    await expect(history.getByText("Nenhuma consulta vinculada nesta página.")).toBeVisible();
+    const original = unwrap(await member.from("appointments").select("patient_id,patient_name").eq("id", appointment).single());
+    expect(original).toEqual({ patient_id: null, patient_name: name });
+  } finally {
+    unwrap(await stack.admin.from("appointments").delete().eq("id", appointment));
+    unwrap(await stack.admin.from("patients").delete().in("id", [patient, homonym]));
     await stack.removeUser(user);
   }
 });

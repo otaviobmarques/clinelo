@@ -8,7 +8,7 @@ export type Patient = {
 };
 
 export function patientsUrl(values: {
-  clinic?: string; patient?: string; q?: string; archived?: string; notice?: string; page?: number; historyPage?: number; thread?: string;
+  clinic?: string; patient?: string; q?: string; archived?: string; notice?: string; page?: number; historyPage?: number; thread?: string; appointment?: string;
 } = {}) {
   const params = new URLSearchParams();
   for (const [name, value] of Object.entries(values)) if (value) params.set(name, String(value));

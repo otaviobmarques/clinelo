@@ -10,6 +10,7 @@ export async function savePatient(form: FormData) {
   const clinic = get("clinic");
   const patient = get("patient");
   const revision = get("revision");
+  const appointment = get("appointment");
   const thread = get("thread");
   const operation = get("operation");
   const name = get("name").trim();
@@ -18,6 +19,7 @@ export async function savePatient(form: FormData) {
   const location = {
     clinic: validId(clinic) ? clinic : undefined,
     patient: validId(patient) ? patient : undefined,
+    appointment: validId(appointment) ? appointment : undefined,
     thread: validId(thread) ? thread : undefined,
     q: agendaPatientQuery(get("q")),
     archived: get("archived") === "1" ? "1" : undefined,
@@ -45,5 +47,34 @@ export async function savePatient(form: FormData) {
   redirect(patientsUrl({
     ...location, patient: data, q: operation === "create" ? undefined : location.q,
     archived: operation === "archive" ? "1" : undefined, notice: operation,
+  }));
+}
+
+export async function linkPatientVisit(form: FormData) {
+  const get = (name: string) => String(form.get(name) ?? "");
+  const clinic = get("clinic");
+  const patient = get("patient");
+  const appointment = get("appointment");
+  const revision = get("revision");
+  const unlink = get("operation") === "unlink";
+  const location = {
+    clinic: validId(clinic) ? clinic : undefined,
+    patient: validId(patient) ? patient : undefined,
+    appointment: !unlink && validId(appointment) ? appointment : undefined,
+    archived: get("archived") === "1" ? "1" : undefined,
+  };
+  if (!location.clinic || !location.patient || !validId(appointment)
+    || !/^\d{1,10}$/.test(revision) || Number(revision) > 2147483647
+    || (!unlink && get("operation") !== "link")) {
+    redirect(patientsUrl({ ...location, notice: "invalid" }));
+  }
+  const client = await supabase();
+  const { error } = await client.rpc("patient_link_visit", {
+    p_clinic: clinic, p_patient: patient, p_appointment: appointment, p_revision: Number(revision), p_unlink: unlink,
+  });
+  redirect(patientsUrl({
+    ...location, appointment: error ? location.appointment : undefined,
+    notice: error ? error.code === "42501" ? "forbidden" : error.code === "P0001" ? "changed" : "error"
+      : unlink ? "unlinked" : "linked",
   }));
 }

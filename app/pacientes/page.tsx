@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { logout } from "../actions";
-import { savePatient } from "./actions";
+import { linkPatientVisit, savePatient } from "./actions";
 import { agendaPatientQuery, agendaUrl, localDay, statusLabels, validId, type Booking, type Clinic } from "../../lib/agenda";
 import { inboxUrl } from "../../lib/inbox";
 import { patientsUrl, type Patient } from "../../lib/patients";
@@ -14,6 +14,8 @@ const messages = {
   update: "Cadastro atualizado.",
   archive: "Cadastro arquivado.",
   restore: "Cadastro reativado.",
+  linked: "Consulta vinculada à ficha.",
+  unlinked: "Consulta desvinculada da ficha.",
   invalid: "Confira o nome e os dados de contato informados.",
   forbidden: "Você não tem acesso a esta clínica.",
   changed: "O cadastro foi alterado. Confira os dados antes de continuar.",
@@ -26,14 +28,15 @@ function readPage(value: string) {
   return /^\d{1,5}$/.test(value) ? Math.max(1, Number(value)) : 1;
 }
 
-function Fields({ clinic, patient, thread, q, archived }: {
-  clinic: string; patient?: Patient; thread?: string; q: string; archived?: string;
+function Fields({ clinic, patient, thread, appointment, q, archived }: {
+  clinic: string; patient?: Patient; thread?: string; appointment?: string; q: string; archived?: string;
 }) {
   return <>
     <input type="hidden" name="clinic" value={clinic} />
     <input type="hidden" name="patient" value={patient?.id ?? ""} />
     <input type="hidden" name="revision" value={patient?.revision ?? ""} />
     <input type="hidden" name="thread" value={thread ?? ""} />
+    <input type="hidden" name="appointment" value={appointment ?? ""} />
     <input type="hidden" name="q" value={q} />
     <input type="hidden" name="archived" value={archived ?? ""} />
   </>;
@@ -58,6 +61,7 @@ export default async function PatientsPage({ searchParams }: {
   const params = await searchParams;
   const query = (name: string) => typeof params[name] === "string" ? params[name] : "";
   const requestedClinic = query("clinic");
+  const appointment = validId(query("appointment")) ? query("appointment") : undefined;
   const requestedPatient = query("patient");
   const requestedThread = query("thread");
   const q = agendaPatientQuery(query("q"));
@@ -76,28 +80,31 @@ export default async function PatientsPage({ searchParams }: {
   </main>;
 
   const source = q ? client.rpc("patient_search", { p_clinic: clinic.id, p_query: q }) : client.from("patients");
-  const [listResult, profileResult, threadResult] = await Promise.all([
+  const [listResult, profileResult, threadResult, appointmentResult] = await Promise.all([
     source.select(patientFields).eq("clinic_id", clinic.id).eq("archived", Boolean(archived))
       .order("name").order("id").range((page - 1) * 25, page * 25),
     validId(requestedPatient) ? client.from("patients").select(patientFields)
       .eq("clinic_id", clinic.id).eq("id", requestedPatient).maybeSingle() : null,
     validId(requestedThread) ? client.from("inbox_threads").select("id,subject,status")
       .eq("clinic_id", clinic.id).eq("id", requestedThread).maybeSingle() : null,
+    appointment ? client.from("appointments").select("id,patient_name,patient_id,starts_at,revision")
+      .eq("clinic_id", clinic.id).eq("id", appointment).eq("is_block", false).maybeSingle() : null,
   ]);
   const patients = Array.isArray(listResult.data) ? listResult.data as Patient[] : [];
   const patient = profileResult?.data as Patient | undefined;
   const thread = validId(requestedThread) ? requestedThread : undefined;
   const treatment = threadResult?.data;
-  const scoped = { clinic: clinic.id, q, archived, thread };
+  const legacy = appointmentResult?.data;
+  const scoped = { clinic: clinic.id, q, archived, thread, appointment };
   const notice = query("notice");
-  const ok = ["create", "update", "archive", "restore"].includes(notice);
+  const ok = ["create", "update", "archive", "restore", "linked", "unlinked"].includes(notice);
   const [history, staff] = patient ? await Promise.all([
-    client.from("appointments").select("id,professional_id,starts_at,status").eq("clinic_id", clinic.id)
+    client.from("appointments").select("id,professional_id,starts_at,status,revision").eq("clinic_id", clinic.id)
       .eq("patient_id", patient.id).order("starts_at", { ascending: false }).order("id")
       .range((historyPage - 1) * 20, historyPage * 20),
     client.from("professionals").select("id,name").eq("clinic_id", clinic.id),
   ]) : [null, null];
-  const visits = (history?.data ?? []) as Pick<Booking, "id" | "professional_id" | "starts_at" | "status">[];
+  const visits = (history?.data ?? []) as Pick<Booking, "id" | "professional_id" | "starts_at" | "status" | "revision">[];
   const professionalNames = new Map(staff?.data?.map(({ id, name }) => [id, name]) ?? []);
   const timestamp = new Intl.DateTimeFormat("pt-BR", { dateStyle: "short", timeStyle: "short", timeZone: clinic.timezone });
 
@@ -115,6 +122,12 @@ export default async function PatientsPage({ searchParams }: {
           <button className="secondary">Abrir</button>
         </form>}
       </div>
+      {appointment && <p className="notice" role={legacy && !legacy.patient_id ? undefined : "alert"}>
+        {legacy && !legacy.patient_id
+          ? <>Selecione a ficha para vincular a consulta de <strong>{legacy.patient_name}</strong> · {timestamp.format(new Date(legacy.starts_at))}.</>
+          : "Consulta indisponível para vínculo."}{" "}
+        <Link href={patientsUrl({ ...scoped, patient: patient?.id, appointment: undefined })}>Sair do vínculo</Link>
+      </p>}
       {requestedThread && treatment?.status !== "open" && <p className="notice" role="alert">
         Atendimento indisponível para agendamento. <Link href={patientsUrl({ ...scoped, thread: undefined })}>Abrir cadastro geral</Link>
       </p>}
@@ -131,8 +144,9 @@ export default async function PatientsPage({ searchParams }: {
           <form method="get" role="search" className="inbox-search" key={q}>
             <input type="hidden" name="clinic" value={clinic.id} />
             {thread && <input type="hidden" name="thread" value={thread} />}
+            {appointment && <input type="hidden" name="appointment" value={appointment} />}
             {archived && <input type="hidden" name="archived" value={archived} />}
-            <label>Buscar por nome<input type="search" name="q" defaultValue={q} maxLength={120} /></label>
+            <label>Buscar por nome, telefone ou e-mail<input type="search" name="q" defaultValue={q} maxLength={120} /></label>
             <button className="secondary">Buscar</button>
             {q && <Link className="secondary button" href={patientsUrl({ ...scoped, q: undefined })}>Limpar busca</Link>}
           </form>
@@ -147,7 +161,7 @@ export default async function PatientsPage({ searchParams }: {
             {patients.slice(0, 25).map((item) => <li key={item.id}>
               <Link aria-current={item.id === patient?.id ? "page" : undefined}
                 href={patientsUrl({ ...scoped, patient: item.id, page })}>{item.name}</Link>
-              {item.phone && <p className="subtle">{item.phone}</p>}
+              {(item.phone || item.email) && <p className="subtle">{[item.phone, item.email].filter(Boolean).join(" · ")}</p>}
             </li>)}
           </ul>
           {(page > 1 || patients.length > 25) && <nav className="inbox-nav" aria-label="Páginas de pacientes">
@@ -156,7 +170,14 @@ export default async function PatientsPage({ searchParams }: {
           </nav>}
           {patient && <section className="inbox-thread" aria-labelledby="patient-history">
             <h2 id="patient-history">Consultas de {patient.name}</h2>
-            {!patient.archived && (!requestedThread || treatment?.status === "open") && <Link className="secondary button"
+            {!patient.archived && legacy && !legacy.patient_id && <form action={linkPatientVisit} className="filters">
+              <input type="hidden" name="clinic" value={clinic.id} />
+              <input type="hidden" name="patient" value={patient.id} />
+              <input type="hidden" name="appointment" value={legacy.id} />
+              <input type="hidden" name="revision" value={legacy.revision} />
+              <button name="operation" value="link">Confirmar vínculo desta consulta</button>
+            </form>}
+            {!appointment && !patient.archived && (!requestedThread || treatment?.status === "open") && <Link className="secondary button"
               href={agendaUrl({ clinic: clinic.id, patientId: patient.id, thread: treatment?.id }) + "#vagas"}>Agendar para este paciente</Link>}
             {history?.error || staff?.error ? <p role="alert">Não foi possível carregar as consultas.</p>
               : !visits.length ? <p className="empty">Nenhuma consulta vinculada nesta página.</p>
@@ -168,6 +189,17 @@ export default async function PatientsPage({ searchParams }: {
                     {timestamp.format(start)}
                   </Link>
                   <p className="subtle">{professionalNames.get(item.professional_id) ?? "Profissional"} · {statusLabels[item.status]}</p>
+                  <details>
+                    <summary>Desvincular consulta</summary>
+                    <form action={linkPatientVisit} className="filters">
+                      <input type="hidden" name="clinic" value={clinic.id} />
+                      <input type="hidden" name="patient" value={patient.id} />
+                      <input type="hidden" name="appointment" value={item.id} />
+                      <input type="hidden" name="revision" value={item.revision} />
+                      <input type="hidden" name="archived" value={patient.archived ? "1" : ""} />
+                      <button className="secondary" name="operation" value="unlink">Confirmar desvinculação</button>
+                    </form>
+                  </details>
                 </li>;
               })}</ul>}
             {(historyPage > 1 || visits.length > 20) && <nav className="inbox-nav" aria-label="Páginas das consultas">

@@ -126,7 +126,7 @@ export default async function Page({ searchParams }: { searchParams: Promise<Par
       p_clinic: clinic.id, p_professional: professional.id, p_from: day,
     }) : null,
     historyBooking?.data ? client.from("appointment_events")
-      .select("id,revision,occurred_at,actor_id,previous_status,status,previous_start,starts_at,previous_professional,professional_id")
+      .select("id,revision,occurred_at,actor_id,previous_status,status,previous_start,starts_at,previous_professional,professional_id,previous_patient_id,patient_id")
       .eq("clinic_id", clinic.id).eq("appointment_id", historyBooking.data.id).order("id", { ascending: false }).limit(50) : null,
     professional ? client.from("professional_hours").select("opens_at,closes_at,break_from,break_until")
       .eq("clinic_id", clinic.id).eq("professional_id", professional.id).eq("weekday", weekday).maybeSingle() : null,
@@ -177,9 +177,9 @@ export default async function Page({ searchParams }: { searchParams: Promise<Par
   const now = Date.now();
   const audited = historyBooking?.data as Booking | undefined;
   const events = historyResult?.data ?? [];
-  const latest = events[0];
+  const latest = events.find((event) => event.previous_status !== event.status);
   const undoable = audited && latest && ["attended", "absent"].includes(audited.status)
-    && latest.revision === audited.revision && latest.status === audited.status
+    && latest.status === audited.status
     && ["scheduled", "confirmed"].includes(latest.previous_status ?? "");
   const historyDate = new Intl.DateTimeFormat("pt-BR", { timeZone: clinic.timezone, dateStyle: "short", timeStyle: "short" });
   const professionalName = (id: string) => professionals.find((person) => person.id === id)?.name ?? "Profissional";
@@ -267,7 +267,9 @@ export default async function Page({ searchParams }: { searchParams: Promise<Par
                 <span>{professionals.find(({ id }) => id === booking.professional_id)?.name ?? "Profissional"}</span>
                 {!booking.is_block && <Link href={agendaUrl({ ...scope, history: booking.id }) + "#historico-consulta"}>Ver histórico</Link>}
                 {outsideIds.has(booking.id) && <span className="tag warning-tag">Fora da grade atual</span>}
-                {booking.patient_id && <Link href={patientsUrl({ clinic: clinic.id, patient: booking.patient_id })}>Ver ficha do paciente</Link>}
+                {booking.patient_id
+                  ? <Link href={patientsUrl({ clinic: clinic.id, patient: booking.patient_id })}>Ver ficha do paciente</Link>
+                  : !booking.is_block && <Link href={patientsUrl({ clinic: clinic.id, appointment: booking.id })}>Vincular à ficha</Link>}
                 {booking.inbox_thread_id && <Link href={inboxUrl({ clinic: clinic.id, thread: booking.inbox_thread_id })}>Ver atendimento</Link>}
               </div>
               <span className={booking.status === "cancelled" ? "tag" : "tag active"}>{booking.is_block ? bookingIsOpen(booking) ? "Bloqueado" : "Liberado" : statusLabels[booking.status]}</span>
@@ -308,7 +310,9 @@ export default async function Page({ searchParams }: { searchParams: Promise<Par
               {events.map((event) => <li key={event.id}>
                 <p>{event.previous_status === null ? "Agendamento criado" : event.previous_status !== event.status
                   ? statusLabels[event.previous_status as Booking["status"]] + " → " + statusLabels[event.status as Booking["status"]]
-                  : "Agendamento remarcado"}</p>
+                  : event.previous_patient_id !== event.patient_id
+                    ? event.patient_id ? "Consulta vinculada a uma ficha" : "Consulta desvinculada da ficha"
+                    : "Agendamento remarcado"}</p>
                 {event.previous_start && (event.previous_start !== event.starts_at || event.previous_professional !== event.professional_id) &&
                   <p className="subtle">{historyDate.format(new Date(event.previous_start))} · {professionalName(event.previous_professional)}
                     {" → "}{historyDate.format(new Date(event.starts_at))} · {professionalName(event.professional_id)}</p>}
