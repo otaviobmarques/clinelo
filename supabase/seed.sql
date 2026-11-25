@@ -19,3 +19,11 @@ select p.clinic_id, p.id, s.starts_at, s.ends_at, 'Paciente Fictício ' || right
 from public.professionals p cross join next_day d
 cross join lateral clinelo_private.work_slots(d.day, 'America/Sao_Paulo') s
 where (s.starts_at at time zone 'America/Sao_Paulo')::time = time '09:00';
+
+insert into public.inbox_threads (id, clinic_id, subject, status) values
+  ('30000000-0000-4000-8000-000000000001', '10000000-0000-4000-8000-000000000001', 'Retorno de agendamento fictício', 'open'),
+  ('30000000-0000-4000-8000-000000000002', '10000000-0000-4000-8000-000000000002', 'Confirmação de horário fictícia', 'closed');
+
+insert into public.inbox_notes (clinic_id, thread_id, body) values
+  ('10000000-0000-4000-8000-000000000001', '30000000-0000-4000-8000-000000000001', 'A equipe deve conferir as vagas da próxima semana.'),
+  ('10000000-0000-4000-8000-000000000002', '30000000-0000-4000-8000-000000000002', 'Exemplo de atendimento encerrado pela recepção.');

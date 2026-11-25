@@ -4,6 +4,7 @@ import {
   agendaUrl, localDay, messages, shiftDay, statusLabels, validDay, validId,
   type Booking, type Clinic, type Professional, type Slot,
 } from "../lib/agenda";
+import { inboxUrl } from "../lib/inbox";
 import { googleAvailability, type GoogleAvailability } from "../lib/google-calendar";
 import { supabase, supabaseSettings } from "../lib/supabase";
 
@@ -29,7 +30,7 @@ function Integrations({ googleStatus }: { googleStatus: GoogleAvailability["stat
     <ul>
       <li>Agenda do Produto <span className="tag active">Ativa</span></li>
       <li>Google Agenda <span className={googleStatus === "checked" ? "tag active" : "tag"}>{googleLabels[googleStatus]}</span></li>
-      <li>Caixa compartilhada <span className="tag">Desconectada</span></li>
+      <li>Caixa compartilhada <span className="tag active">Ativa</span></li>
       <li>WhatsApp Business oficial <span className="tag">Desconectado</span></li>
     </ul>
   </section>;
@@ -120,7 +121,10 @@ export default async function Page({ searchParams }: { searchParams: Promise<Par
   return <>
     <header className="topbar"><div className="topbar-inner">
       <Brand />
-      <form action={logout}><button className="secondary">Sair</button></form>
+      <nav className="date-nav" aria-label="Recepção">
+        <Link href={inboxUrl(clinic.id)} className="secondary button">Caixa compartilhada</Link>
+        <form action={logout}><button className="secondary">Sair</button></form>
+      </nav>
     </div></header>
     <main className="workspace">
       <div className="heading">
