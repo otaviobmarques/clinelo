@@ -90,6 +90,8 @@ A chamada FreeBusy envia o ID do calendário e o intervalo de consulta. Ela reto
 
 Acesse **Pacientes** pela agenda. A ficha tem nome e contatos opcionais, busca por nome, telefone ou e-mail e histórico de consultas vinculadas. Pode ser editada, arquivada e reativada pela equipe da clínica. Um cadastro arquivado preserva seu histórico e fica indisponível para novos agendamentos.
 
+Use **Vincular paciente ao atendimento** na caixa para associar uma conversa à ficha. A ficha lista as conversas vinculadas, e a caixa permite remover o vínculo ou agendar com o paciente já selecionado. Essas alterações aparecem no histórico da conversa.
+
 Use **Agendar para este paciente** na ficha ou **Agendar com paciente cadastrado** em um atendimento aberto da caixa. A agenda usa o nome do cadastro e grava o vínculo na mesma transação da reserva. Para acrescentar uma consulta antiga, use **Vincular à ficha** na agenda, localize o cadastro e confirme. A equipe pode desfazer um vínculo pela ficha. O histórico da consulta registra essas operações. O histórico da ficha reúne as reservas vinculadas explicitamente e o nome gravado em cada reserva é preservado.
 
 ## Caixa compartilhada

@@ -6,16 +6,19 @@ import { changeInbox } from "./actions";
 import { agendaUrl, localDay, statusLabels, validId, type Booking, type Clinic } from "../../lib/agenda";
 import { channelLabels, inboxAssignment, inboxChannel, inboxLabels, inboxSearch, inboxUrl, type InboxAssignment, type InboxChannel, type InboxStatus } from "../../lib/inbox";
 import { whatsappConfigured } from "../../lib/whatsapp";
+import { linkPatientThread } from "../pacientes/actions";
 import { patientsUrl } from "../../lib/patients";
 import { supabase, supabaseSettings } from "../../lib/supabase";
 
 export const dynamic = "force-dynamic";
 
-type Thread = { id: string; subject: string; status: InboxStatus; updated_at: string; channel: InboxChannel; assignee_id: string | null; assignee_label: string | null; queued_at: string | null };
+type Thread = { id: string; subject: string; status: InboxStatus; updated_at: string; channel: InboxChannel; assignee_id: string | null; assignee_label: string | null; queued_at: string | null; patient_id: string | null; patient_link_revision: string };
 type Note = { id: string; body: string; author_id: string | null; created_at: string; source: "internal" | "whatsapp" };
 type Params = Record<string, string | string[] | undefined>;
 
 const messages = {
+  patientLinked: "Paciente vinculado ao atendimento.",
+  patientUnlinked: "Paciente desvinculado do atendimento.",
   claim: "Você assumiu o atendimento.",
   release: "Atendimento devolvido à fila.",
   create: "Atendimento criado.",
@@ -78,7 +81,7 @@ export default async function Inbox({ searchParams }: { searchParams: Promise<Pa
   const queueSource = search
     ? client.rpc("inbox_search", { p_clinic: clinic.id, p_query: search })
     : client.from("inbox_threads");
-  const queueQuery = queueSource.select("id,subject,status,updated_at,channel,assignee_id,assignee_label,queued_at")
+  const queueQuery = queueSource.select("id,subject,status,updated_at,channel,assignee_id,assignee_label,queued_at,patient_id,patient_link_revision")
     .eq("clinic_id", clinic.id).eq("status", status);
   if (channel) queueQuery.eq("channel", channel);
   if (assignment === "mine") queueQuery.eq("assignee_id", user.id);
@@ -88,25 +91,28 @@ export default async function Inbox({ searchParams }: { searchParams: Promise<Pa
   }
   const [queue, details] = await Promise.all([
     queueQuery.order("updated_at", { ascending: false }).order("id").range(start, start + pageSize),
-    canSelectThread ? client.from("inbox_threads").select("id,subject,status,updated_at,channel,assignee_id,assignee_label,queued_at")
+    canSelectThread ? client.from("inbox_threads").select("id,subject,status,updated_at,channel,assignee_id,assignee_label,queued_at,patient_id,patient_link_revision")
       .eq("clinic_id", clinic.id).eq("id", requestedThread).maybeSingle() : null,
   ]);
   const threads = (queue.data ?? []) as Thread[];
   const thread = details?.data as Thread | undefined;
-  const [timeline, linkedBookings] = thread ? await Promise.all([
+  const [timeline, linkedBookings, patientResult] = thread ? await Promise.all([
     client.from("inbox_notes").select("id,body,author_id,created_at,source")
       .eq("clinic_id", clinic.id).eq("thread_id", thread.id).order("created_at", { ascending: false })
       .order("id", { ascending: false }).range(historyStart, historyStart + historySize),
     client.from("appointments").select("id,starts_at,status,professional_id").eq("clinic_id", clinic.id)
       .eq("inbox_thread_id", thread.id).order("starts_at", { ascending: false }).order("id"),
-  ]) : [null, null];
+    thread.patient_id ? client.from("patients").select("id,name,archived").eq("clinic_id", clinic.id)
+      .eq("id", thread.patient_id).maybeSingle() : null,
+  ]) : [null, null, null];
+  const linkedPatient = patientResult?.data;
   const notes = (timeline?.data ?? []) as Note[];
   const historyLink = (n: number) => inboxUrl({ ...filters, thread: thread?.id, page, historyPage: n });
   const format = new Intl.DateTimeFormat("pt-BR", {
     timeZone: clinic.timezone, dateStyle: "short", timeStyle: "short",
   });
   const notice = requestedClinic && !selected ? "access" : query("notice");
-  const success = ["create", "note", "close", "reopen", "claim", "release"].includes(notice);
+  const success = ["create", "note", "close", "reopen", "claim", "release", "patientLinked", "patientUnlinked"].includes(notice);
 
   return <>
     <header className="topbar"><div className="topbar-inner">
@@ -126,7 +132,7 @@ export default async function Inbox({ searchParams }: { searchParams: Promise<Pa
       {Object.hasOwn(messages, notice) && <p className={success ? "notice success" : "notice"} role={success ? "status" : "alert"}>
         {messages[notice as keyof typeof messages]}
       </p>}
-      {(queue.error || details?.error || timeline?.error || linkedBookings?.error) && <p className="notice" role="alert">
+      {(queue.error || details?.error || timeline?.error || linkedBookings?.error || patientResult?.error) && <p className="notice" role="alert">
         Parte da caixa está indisponível. Atualize a página para tentar novamente.
       </p>}
       {canSelectThread && !details?.error && !thread && <p className="notice" role="alert">Atendimento indisponível.</p>}
@@ -194,11 +200,32 @@ export default async function Inbox({ searchParams }: { searchParams: Promise<Pa
               <label>Nota interna<textarea name="text" maxLength={2000} required rows={4} /></label>
               <button>Adicionar nota</button>
             </form>}
+            <h3>Paciente vinculado</h3>
+            {linkedPatient ? <>
+              <Link href={patientsUrl({ clinic: clinic.id, patient: linkedPatient.id,
+                archived: linkedPatient.archived ? "1" : undefined })}>{linkedPatient.name}</Link>
+              {linkedPatient.archived && <span className="tag">Arquivado</span>}
+              <details>
+                <summary>Remover vínculo do paciente</summary>
+                <form action={linkPatientThread} className="filters">
+                  <input type="hidden" name="clinic" value={clinic.id} />
+                  <input type="hidden" name="thread" value={thread.id} />
+                  <input type="hidden" name="patient" value={linkedPatient.id} />
+                  <input type="hidden" name="revision" value={thread.patient_link_revision} />
+                  <input type="hidden" name="status" value={thread.status} />
+                  <button className="secondary" name="operation" value="unlink">Confirmar remoção do vínculo</button>
+                </form>
+              </details>
+            </> : !thread.patient_id && <Link href={patientsUrl({ clinic: clinic.id, thread: thread.id, linkThread: "1" })}>
+              Vincular paciente ao atendimento
+            </Link>}
             <h3>Consultas vinculadas</h3>
             {thread.status === "open" && <Link className="secondary button"
               href={agendaUrl({ clinic: clinic.id, thread: thread.id }) + "#vagas"}>Agendar consulta para este atendimento</Link>}
-            {thread.status === "open" && <p className="subtle"><Link
-              href={patientsUrl({ clinic: clinic.id, thread: thread.id })}>Agendar com paciente cadastrado</Link></p>}
+            {thread.status === "open" && <p className="subtle">{linkedPatient && !linkedPatient.archived
+              ? <Link href={agendaUrl({ clinic: clinic.id, thread: thread.id, patientId: linkedPatient.id }) + "#vagas"}>Agendar para o paciente vinculado</Link>
+              : <Link href={patientsUrl({ clinic: clinic.id, thread: thread.id })}>Agendar com paciente cadastrado</Link>}
+            </p>}
             {Boolean(linkedBookings?.data?.length) && <ul className="inbox-list">
               {linkedBookings?.data?.map((item) => <li key={item.id}>
                 <Link href={agendaUrl({ clinic: clinic.id, day: localDay(clinic.timezone, new Date(item.starts_at)),

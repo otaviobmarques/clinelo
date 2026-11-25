@@ -2,6 +2,7 @@
 
 import { redirect } from "next/navigation";
 import { agendaPatientQuery, validId } from "../../lib/agenda";
+import { inboxUrl } from "../../lib/inbox";
 import { patientsUrl } from "../../lib/patients";
 import { supabase } from "../../lib/supabase";
 
@@ -20,6 +21,7 @@ export async function savePatient(form: FormData) {
     clinic: validId(clinic) ? clinic : undefined,
     patient: validId(patient) ? patient : undefined,
     appointment: validId(appointment) ? appointment : undefined,
+    linkThread: get("linkThread") === "1" ? "1" : undefined,
     thread: validId(thread) ? thread : undefined,
     q: agendaPatientQuery(get("q")),
     archived: get("archived") === "1" ? "1" : undefined,
@@ -76,5 +78,27 @@ export async function linkPatientVisit(form: FormData) {
     ...location, appointment: error ? location.appointment : undefined,
     notice: error ? error.code === "42501" ? "forbidden" : error.code === "P0001" ? "changed" : "error"
       : unlink ? "unlinked" : "linked",
+  }));
+}
+
+export async function linkPatientThread(form: FormData) {
+  const get = (name: string) => String(form.get(name) ?? "");
+  const clinic = get("clinic");
+  const thread = get("thread");
+  const patient = get("patient");
+  const revision = get("revision");
+  const operation = get("operation");
+  const status = get("status") === "closed" ? "closed" : "open";
+  if (![clinic, thread, patient, revision].every(validId) || !["link", "unlink"].includes(operation)) {
+    redirect(inboxUrl({ notice: "invalid" }));
+  }
+  const client = await supabase();
+  const { error } = await client.rpc("inbox_link_patient", {
+    p_clinic: clinic, p_thread: thread, p_patient: patient, p_revision: revision, p_unlink: operation === "unlink",
+  });
+  redirect(inboxUrl({
+    clinic, thread, status,
+    notice: error ? error.code === "42501" ? "access" : error.code === "P0001" ? "changed" : "error"
+      : operation === "unlink" ? "patientUnlinked" : "patientLinked",
   }));
 }
