@@ -5,6 +5,8 @@ on:
       - 'app/page.tsx'
       - 'app/actions.ts'
       - 'app/caixa/**'
+      - 'app/grade/**'
+      - 'lib/grade.ts'
       - 'lib/inbox.ts'
       - 'tests/whatsapp.spec.ts'
       - 'tests/caixa.spec.ts'

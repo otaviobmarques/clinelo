@@ -13,7 +13,7 @@ npm run demo -- --env
 npm run dev
 ```
 
-Abra [http://localhost:3000](http://localhost:3000) e use uma das duas contas fictícias exibidas pelo comando `demo`. Cada conta pertence a uma clínica diferente. As senhas são geradas localmente a cada execução. Use `npm run demo` para gerar novas contas quando o arquivo `.env.local` já existir. O arquivo contém a URL e a chave pública do ambiente local. A chave administrativa é usada exclusivamente pelos scripts locais de provisionamento e teste.
+Abra [http://localhost:3000](http://localhost:3000) e use uma das duas contas fictícias exibidas pelo comando `demo`. Cada conta pertence a uma clínica diferente. A conta Horizonte pode administrar a grade fictícia. As senhas são geradas localmente a cada execução. Use `npm run demo` para gerar novas contas quando o arquivo `.env.local` já existir. O arquivo contém a URL e a chave pública do ambiente local. A chave administrativa é usada exclusivamente pelos scripts locais de provisionamento e teste.
 
 A carga inicial inclui três profissionais e consultas fictícias no próximo dia útil a partir da criação do banco. Navegue até esse dia ou selecione outra data e um profissional no formulário de vagas.
 
@@ -28,7 +28,9 @@ A carga inicial inclui três profissionais e consultas fictícias no próximo di
 
 ## Grade por profissional
 
-A administração configura exceções à grade padrão na tabela `professional_hours` do Supabase. Use o UUID da clínica e do profissional e `weekday` de 1 (segunda) até 7 (domingo). Uma linha define a abertura e o fechamento daquele dia da semana, com pausa opcional. Use múltiplos de 30 minutos e horários no fuso da clínica.
+Use **Administrar grade** no Clinelo para salvar horários e pausas, fechar um dia ou restaurar o padrão. O atalho aparece para membros autorizados na clínica. A administração habilita o acesso definindo `can_manage_hours = true` no vínculo correspondente em `clinic_members`.
+
+A grade também pode ser administrada na tabela `professional_hours` do Supabase. Use o UUID da clínica e do profissional e `weekday` de 1 (segunda) até 7 (domingo). Uma linha define a abertura e o fechamento daquele dia da semana, com pausa opcional. Use múltiplos de 30 minutos e horários no fuso da clínica.
 
 - Para fechar um dia da semana, mantenha os quatro horários nulos.
 - Para retomar a grade padrão, remova a linha correspondente.

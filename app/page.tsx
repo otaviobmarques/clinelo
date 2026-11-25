@@ -6,6 +6,7 @@ import {
   type Booking, type Clinic, type Professional, type Slot,
 } from "../lib/agenda";
 import { whatsappConfigured } from "../lib/whatsapp";
+import { gradeUrl } from "../lib/grade";
 import { inboxUrl } from "../lib/inbox";
 import { googleAvailability, type GoogleAvailability } from "../lib/google-calendar";
 import { supabase, supabaseSettings } from "../lib/supabase";
@@ -89,7 +90,7 @@ export default async function Page({ searchParams }: { searchParams: Promise<Par
   const edit = validId(query("edit")) ? query("edit") : "";
   const history = validId(query("history")) && (!requestedClinic || selectedClinic) ? query("history") : undefined;
   const requestedThread = !edit ? query("thread") : "";
-  const [staff, target, originResult, historyBooking] = await Promise.all([
+  const [staff, target, originResult, historyBooking, gradeAccess] = await Promise.all([
     client.from("professionals").select("id,name").eq("clinic_id", clinic.id).order("name"),
     edit ? client.from("appointments").select("*").eq("clinic_id", clinic.id).eq("id", edit).maybeSingle() : null,
     validId(requestedThread) && (!requestedClinic || selectedClinic)
@@ -97,6 +98,7 @@ export default async function Page({ searchParams }: { searchParams: Promise<Par
         .eq("id", requestedThread).maybeSingle() : null,
     history ? client.from("appointments").select("*").eq("clinic_id", clinic.id)
       .eq("id", history).eq("is_block", false).maybeSingle() : null,
+    client.from("clinic_members").select("can_manage_hours").eq("clinic_id", clinic.id).eq("user_id", user.id).maybeSingle(),
   ]);
   const origin = originResult?.data;
   const validOrigin = !requestedThread || origin?.status === "open";
@@ -187,6 +189,7 @@ export default async function Page({ searchParams }: { searchParams: Promise<Par
     <header className="topbar"><div className="topbar-inner">
       <Brand />
       <nav className="date-nav" aria-label="Recepção">
+        {gradeAccess.data?.can_manage_hours && <Link href={gradeUrl({ clinic: clinic.id })} className="secondary button">Administrar grade</Link>}
         <Link href={inboxUrl({ clinic: clinic.id })} className="secondary button">Caixa compartilhada</Link>
         <form action={logout}><button className="secondary">Sair</button></form>
       </nav>
