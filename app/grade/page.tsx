@@ -184,7 +184,7 @@ export default async function Grade({ searchParams }: { searchParams: Promise<Pa
                     const starts = new Date(item.starts_at);
                     return <li key={item.id}>
                       <Link href={agendaUrl({ clinic: clinic.id, day: localDay(clinic.timezone, starts),
-                        agendaProfessional: item.professional_id }) + "#consulta-" + item.id}>{item.patient_name}</Link>
+                        agendaProfessional: item.professional_id, professional: item.professional_id }) + "#consulta-" + item.id}>{item.patient_name}</Link>
                       <p className="subtle">{dateTime.format(starts)}</p>
                     </li>;
                   })}
