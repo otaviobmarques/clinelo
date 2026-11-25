@@ -447,9 +447,10 @@ test("abre ou fecha uma data específica sem mudar a grade semanal", async ({ pa
     await page.getByRole("button", { name: "Fechar o dia" }).click();
     await expect(page.getByText("Fechado", { exact: true })).toBeVisible();
     expect(unwrap(await slots(day))).toEqual([]);
-    await page.goto(`/?day=${day}&professional=${professionalA}`);
+    const impact = page.getByRole("region", { name: "Consultas fora da grade" });
+    await impact.getByRole("link", { name: patient }).click();
     await expect(page.getByText("Exceção de horário para esta data.")).toBeVisible();
-    await expect(page.getByRole("article").filter({ hasText: patient })).toBeVisible();
+    await expect(page.getByRole("article").filter({ hasText: patient })).toContainText("Fora da grade atual");
     await page.goto(editor);
     await page.getByRole("button", { name: "Remover exceção" }).click();
     await expect(page.getByRole("button", { name: "Remover exceção" })).toHaveCount(0);

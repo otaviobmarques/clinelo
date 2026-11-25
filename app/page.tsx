@@ -111,7 +111,7 @@ export default async function Page({ searchParams }: { searchParams: Promise<Par
   const professional = [query("professional"), moving?.professional_id]
     .map((id) => professionals.find((person) => person.id === id)).find(Boolean) ?? professionals[0];
   const weekday = new Date(day + "T12:00:00Z").getUTCDay() || 7;
-  const [agenda, slotResult, weekResult, historyResult, hoursResult, dateHoursResult] = await Promise.all([
+  const [agenda, slotResult, weekResult, historyResult, hoursResult, dateHoursResult, outsideHours] = await Promise.all([
     dayQuery,
     professional ? client.rpc("agenda_slots", {
       p_clinic: clinic.id, p_professional: professional.id, p_day: day,
@@ -126,7 +126,11 @@ export default async function Page({ searchParams }: { searchParams: Promise<Par
       .eq("clinic_id", clinic.id).eq("professional_id", professional.id).eq("weekday", weekday).maybeSingle() : null,
     professional ? client.from("professional_date_hours").select("opens_at,closes_at,break_from,break_until")
       .eq("clinic_id", clinic.id).eq("professional_id", professional.id).eq("day", day).maybeSingle() : null,
+    client.rpc("agenda_outside_hours", { p_clinic: clinic.id, p_from: day, p_through: day,
+      p_professional: agendaProfessional?.id ?? null }).select("id"),
   ]);
+  const outsideRows = Array.isArray(outsideHours.data) ? outsideHours.data as { id: string }[] : [];
+  const outsideIds = new Set(outsideRows.map(({ id }) => id));
   const bookings = (agenda.data ?? []) as Booking[];
   const agendaStatus = agendaStatusFilter(query("agendaStatus"));
   const patientQuery = agendaPatientQuery(query("patientQuery"));
@@ -209,7 +213,7 @@ export default async function Page({ searchParams }: { searchParams: Promise<Par
       {requestedClinic && !selectedClinic
         ? <p className="notice" role="alert">Você não tem acesso à clínica solicitada.</p>
         : <Notice code={query("notice")} />}
-      {(staff.error || agenda.error || target?.error || slotResult?.error) &&
+      {(staff.error || agenda.error || outsideHours.error || target?.error || slotResult?.error) &&
         <p className="notice" role="alert">Parte da agenda está indisponível. Atualize a página para tentar novamente.</p>}
       {edit && !moving && !target?.error &&
         <p className="notice" role="alert">Este agendamento está indisponível para remarcação.</p>}
@@ -253,6 +257,7 @@ export default async function Page({ searchParams }: { searchParams: Promise<Par
                 <strong>{booking.patient_name}</strong>
                 <span>{professionals.find(({ id }) => id === booking.professional_id)?.name ?? "Profissional"}</span>
                 {!booking.is_block && <Link href={agendaUrl({ ...scope, history: booking.id }) + "#historico-consulta"}>Ver histórico</Link>}
+                {outsideIds.has(booking.id) && <span className="tag warning-tag">Fora da grade atual</span>}
                 {booking.inbox_thread_id && <Link href={inboxUrl({ clinic: clinic.id, thread: booking.inbox_thread_id })}>Ver atendimento</Link>}
               </div>
               <span className={booking.status === "cancelled" ? "tag" : "tag active"}>{booking.is_block ? bookingIsOpen(booking) ? "Bloqueado" : "Liberado" : statusLabels[booking.status]}</span>

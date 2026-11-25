@@ -114,3 +114,6 @@ textarea {
 .week-days li { flex-wrap: wrap; border-top: 1px solid var(--line); padding: 8px 0; font-size: .88rem; }
 
 .topbar nav { flex-wrap: wrap; justify-content: end; }
+
+.grade-impact { margin-top: 24px; padding-top: 8px; border-top: 1px solid var(--line); }
+.visit-details .warning-tag { display: inline-block; color: #664108; background: #fff1ce; }

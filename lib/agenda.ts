@@ -11,6 +11,8 @@ export type Booking = Slot & {
   inbox_thread_id: string | null;
 };
 
+export type OutsideHoursBooking = Pick<Booking, "id" | "professional_id" | "patient_name" | "starts_at">;
+
 export const statusLabels = {
   scheduled: "Agendado",
   confirmed: "Confirmado",
