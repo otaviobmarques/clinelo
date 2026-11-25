@@ -27,7 +27,7 @@ test("recepção agenda, remarca e cancela sem expor outra clínica", async ({ p
     await expect(page.getByText("WhatsApp Business oficial")).toContainText("Desconectado");
     await page.getByLabel("Data", { exact: true }).fill(day.toISOString().slice(0, 10));
     await page.getByRole("button", { name: "Consultar vagas" }).click();
-    const time = page.getByLabel("Horário");
+    const time = page.getByRole("combobox", { name: "Horário", exact: true });
     await expect(time.locator("option").nth(2)).toBeAttached();
     await time.selectOption({ index: 1 });
     await page.getByLabel("Nome do paciente").fill(name);
@@ -223,7 +223,7 @@ test("compara sete dias de vagas e abre o dia selecionado", async ({ page }) => 
     await expect(week).toHaveCount(0);
     await expect(page.getByLabel("Data", { exact: true })).toHaveValue(offset(1));
     await expect(page.getByRole("combobox", { name: "Profissional", exact: true })).toHaveValue(professionalA);
-    await expect(page.getByLabel("Horário").locator("option", { hasText: "08:00 – 08:30" })).toHaveCount(1);
+    await expect(page.getByRole("combobox", { name: "Horário", exact: true }).locator("option", { hasText: "08:00 – 08:30" })).toHaveCount(1);
   } finally {
     unwrap(await stack.admin.from("appointments").delete().eq("id", id));
     await stack.removeUser(user);
@@ -256,7 +256,7 @@ test("busca paciente e bloqueia ou devolve uma vaga sem sobrepor consultas", asy
     await page.goto(`/?day=${date}&professional=${professionalA}`);
     await page.getByRole("link", { name: "Bloquear uma vaga" }).click();
     await expect(page.getByRole("heading", { name: "Bloquear horário" })).toBeVisible();
-    const time = page.getByLabel("Horário");
+    const time = page.getByRole("combobox", { name: "Horário", exact: true });
     await time.selectOption({ label: "08:00 – 08:30" });
     await page.getByLabel("Motivo do bloqueio (opcional)", { exact: true }).fill(reason);
     await page.getByRole("button", { name: "Confirmar bloqueio" }).click();
