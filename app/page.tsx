@@ -127,9 +127,10 @@ export default async function Page({ searchParams }: { searchParams: Promise<Par
     professional ? client.from("professional_date_hours").select("opens_at,closes_at,break_from,break_until")
       .eq("clinic_id", clinic.id).eq("professional_id", professional.id).eq("day", day).maybeSingle() : null,
     client.rpc("agenda_outside_hours", { p_clinic: clinic.id, p_from: day, p_through: day,
-      p_professional: agendaProfessional?.id ?? null }).select("id").overrideTypes<{ id: string }[], { merge: false }>(),
+      p_professional: agendaProfessional?.id ?? null }).select("id"),
   ]);
-  const outsideIds = new Set(outsideHours.data?.map(({ id }) => id) ?? []);
+  const outsideRows = Array.isArray(outsideHours.data) ? outsideHours.data as { id: string }[] : [];
+  const outsideIds = new Set(outsideRows.map(({ id }) => id));
   const bookings = (agenda.data ?? []) as Booking[];
   const agendaStatus = agendaStatusFilter(query("agendaStatus"));
   const patientQuery = agendaPatientQuery(query("patientQuery"));

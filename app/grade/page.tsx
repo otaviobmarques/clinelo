@@ -91,8 +91,9 @@ export default async function Grade({ searchParams }: { searchParams: Promise<Pa
       .eq("clinic_id", clinic.id).eq("professional_id", professional.id).gte("day", today)
       .order("day").limit(15),
     client.rpc("agenda_outside_hours", { p_clinic: clinic.id, p_professional: professional.id,
-      p_from: day || today, p_through: impactEnd }).limit(26).overrideTypes<OutsideHoursBooking[], { merge: false }>(),
+      p_from: day || today, p_through: impactEnd }).limit(26),
   ]) : [null, null, null];
+  const affected = Array.isArray(impact?.data) ? impact.data as OutsideHoursBooking[] : [];
   const current = day ? dateResult?.data : weekly;
   const displayed = current ?? weekly;
   const notice = query("notice");
@@ -177,9 +178,9 @@ export default async function Grade({ searchParams }: { searchParams: Promise<Pa
               <h3 id="grade-impact-title">Consultas fora da grade</h3>
               <p className="subtle">{day ? formatDay(day) : "Próximos 90 dias"}</p>
               {impact?.error ? <p role="alert">Não foi possível verificar as consultas.</p>
-                : !impact?.data?.length ? <p className="empty">Nenhuma consulta futura fora da grade atual.</p>
+                : !affected.length ? <p className="empty">Nenhuma consulta futura fora da grade atual.</p>
                 : <ul className="inbox-list">
-                  {impact.data.slice(0, 25).map((item) => {
+                  {affected.slice(0, 25).map((item) => {
                     const starts = new Date(item.starts_at);
                     return <li key={item.id}>
                       <Link href={agendaUrl({ clinic: clinic.id, day: localDay(clinic.timezone, starts),
@@ -188,7 +189,7 @@ export default async function Grade({ searchParams }: { searchParams: Promise<Pa
                     </li>;
                   })}
                 </ul>}
-              {impact?.data && impact.data.length > 25 && <p className="subtle">Exibindo as primeiras 25 consultas. Selecione uma data para revisar o restante.</p>}
+              {affected.length > 25 && <p className="subtle">Exibindo as primeiras 25 consultas. Selecione uma data para revisar o restante.</p>}
             </section>
           </section>
         </div>}
