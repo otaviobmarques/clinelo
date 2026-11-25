@@ -55,7 +55,7 @@ test("recepção agenda, remarca e cancela sem expor outra clínica", async ({ p
     await enter(page, users[1]);
     await page.goto(otherClinicUrl);
     await expect(page.getByRole("combobox", { name: "Clínica", exact: true })).toHaveValue(clinicB);
-    await expect(page.getByRole("alert")).toHaveText("Você não tem acesso à clínica solicitada.");
+    await expect(page.getByRole("main").getByRole("alert")).toHaveText("Você não tem acesso à clínica solicitada.");
     await expect(page.getByRole("article").filter({ hasText: name })).toHaveCount(0);
   } finally {
     unwrap(await stack.admin.from("appointments").delete().eq("patient_name", name));
