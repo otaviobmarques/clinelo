@@ -23,6 +23,7 @@ test("recepção agenda, remarca e cancela sem expor outra clínica", async ({ p
     users.push(await stack.user(clinicB, "navegador-b"));
     await enter(page, users[0]);
     await expect(page.getByText("Clínica Horizonte · Demo", { exact: true }).first()).toBeVisible();
+    await expect(page.getByText("Google Agenda", { exact: false })).toContainText("Desconectada");
     await expect(page.getByText("WhatsApp Business oficial")).toContainText("Desconectado");
     await page.getByLabel("Data", { exact: true }).fill(day.toISOString().slice(0, 10));
     await page.getByRole("button", { name: "Consultar vagas" }).click();

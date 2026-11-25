@@ -4,6 +4,7 @@ import {
   agendaUrl, localDay, messages, shiftDay, statusLabels, validDay, validId,
   type Booking, type Clinic, type Professional, type Slot,
 } from "../lib/agenda";
+import { googleAvailability, type GoogleAvailability } from "../lib/google-calendar";
 import { supabase, supabaseSettings } from "../lib/supabase";
 
 export const dynamic = "force-dynamic";
@@ -15,12 +16,19 @@ function Brand() {
     <div><strong>Clinelo</strong><small>Domma Tecnologia</small></div></div>;
 }
 
-function Integrations() {
+const googleLabels = {
+  disconnected: "Desconectada",
+  unavailable: "Indisponível",
+  "no-slots": "Configurada",
+  checked: "Conectada",
+};
+
+function Integrations({ googleStatus }: { googleStatus: GoogleAvailability["status"] }) {
   return <section className="integrations" aria-labelledby="channels-title">
     <h2 id="channels-title">Canais da recepção</h2>
     <ul>
       <li>Agenda do Produto <span className="tag active">Ativa</span></li>
-      <li>Google Agenda <span className="tag">Desconectada</span></li>
+      <li>Google Agenda <span className={googleStatus === "checked" ? "tag active" : "tag"}>{googleLabels[googleStatus]}</span></li>
       <li>Caixa compartilhada <span className="tag">Desconectada</span></li>
       <li>WhatsApp Business oficial <span className="tag">Desconectado</span></li>
     </ul>
@@ -90,6 +98,12 @@ export default async function Page({ searchParams }: { searchParams: Promise<Par
     p_clinic: clinic.id, p_professional: professional.id, p_day: day,
   }) : null;
   const slots = (slotResult?.data ?? []) as Slot[];
+  const google = professional && (!requestedClinic || selectedClinic) ? await googleAvailability(
+    clinic.id, professional.id, slots, {
+      links: process.env.GOOGLE_CALENDAR_LINKS_JSON,
+      account: process.env.GOOGLE_CALENDAR_SERVICE_ACCOUNT_JSON,
+    },
+  ) : { status: "disconnected" as const };
   const scope = { clinic: clinic.id, day, professional: professional?.id, edit: moving?.id };
   const dayLabel = new Intl.DateTimeFormat("pt-BR", {
     dateStyle: "full", timeZone: "UTC",
@@ -186,17 +200,27 @@ export default async function Page({ searchParams }: { searchParams: Promise<Par
                 <input type="hidden" name="revision" value={moving.revision} />
               </>}
               <p className="subtle">Vagas em {dayLabel} · {professional.name}</p>
+              {google.status === "checked" && <p className="subtle">
+                {google.occupied.size
+                  ? "Os horários ocupados no Google Agenda estão sinalizados para conferência."
+                  : "O Google Agenda está livre nas vagas listadas."}
+              </p>}
+              {google.status === "unavailable" && <p className="subtle" role="status">
+                Não foi possível verificar o Google Agenda. Confira a agenda externa antes de agendar.
+              </p>}
               {slots.length > 0 ? <>
                 <label>Horário<select name="start" defaultValue="" required>
                   <option value="" disabled>Selecione um horário</option>
-                  {slots.map((slot) => <option key={slot.starts_at} value={slot.starts_at}>{formatTime(slot.starts_at)} – {formatTime(slot.ends_at)}</option>)}
+                  {slots.map((slot) => <option key={slot.starts_at} value={slot.starts_at}>{formatTime(slot.starts_at)} – {formatTime(slot.ends_at)}
+                    {google.status === "checked" && google.occupied.has(slot.starts_at) && " · Ocupado no Google"}
+                  </option>)}
                 </select></label>
                 {!moving && <label>Nome do paciente<input name="patient" maxLength={120} required /></label>}
                 <button>{moving ? "Salvar remarcação" : "Agendar consulta"}</button>
               </> : <p className="empty">Nenhuma vaga disponível para esta data.</p>}
             </form>}
           </section>
-          <Integrations />
+          <Integrations googleStatus={google.status} />
         </aside>
       </div>
     </main>
