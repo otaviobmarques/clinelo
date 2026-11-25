@@ -1,3 +1,4 @@
+import { QueueWait } from "./queue-wait";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { logout } from "../actions";
@@ -9,7 +10,7 @@ import { supabase, supabaseSettings } from "../../lib/supabase";
 
 export const dynamic = "force-dynamic";
 
-type Thread = { id: string; subject: string; status: InboxStatus; updated_at: string; channel: InboxChannel; assignee_id: string | null; assignee_label: string | null };
+type Thread = { id: string; subject: string; status: InboxStatus; updated_at: string; channel: InboxChannel; assignee_id: string | null; assignee_label: string | null; queued_at: string | null };
 type Note = { id: string; body: string; author_id: string | null; created_at: string; source: "internal" | "whatsapp" };
 type Params = Record<string, string | string[] | undefined>;
 
@@ -76,14 +77,17 @@ export default async function Inbox({ searchParams }: { searchParams: Promise<Pa
   const queueSource = search
     ? client.rpc("inbox_search", { p_clinic: clinic.id, p_query: search })
     : client.from("inbox_threads");
-  const queueQuery = queueSource.select("id,subject,status,updated_at,channel,assignee_id,assignee_label")
+  const queueQuery = queueSource.select("id,subject,status,updated_at,channel,assignee_id,assignee_label,queued_at")
     .eq("clinic_id", clinic.id).eq("status", status);
   if (channel) queueQuery.eq("channel", channel);
   if (assignment === "mine") queueQuery.eq("assignee_id", user.id);
   if (assignment === "unassigned") queueQuery.is("assignee_id", null);
+  if (status === "open" && assignment === "unassigned") {
+    queueQuery.order("queued_at", { ascending: true, nullsFirst: false });
+  }
   const [queue, details] = await Promise.all([
     queueQuery.order("updated_at", { ascending: false }).order("id").range(start, start + pageSize),
-    canSelectThread ? client.from("inbox_threads").select("id,subject,status,updated_at,channel,assignee_id,assignee_label")
+    canSelectThread ? client.from("inbox_threads").select("id,subject,status,updated_at,channel,assignee_id,assignee_label,queued_at")
       .eq("clinic_id", clinic.id).eq("id", requestedThread).maybeSingle() : null,
   ]);
   const threads = (queue.data ?? []) as Thread[];
@@ -158,6 +162,7 @@ export default async function Inbox({ searchParams }: { searchParams: Promise<Pa
                 href={inboxUrl({ ...filters, thread: item.id, page })}>{item.subject}</Link>
               {" "}<span className="tag">{channelLabels[item.channel]}</span>
               {item.status === "open" && <span className="subtle"> · {item.assignee_id === user.id ? "Você" : item.assignee_label ?? "Sem responsável"} </span>}
+              {item.queued_at && <QueueWait since={item.queued_at} timezone={clinic.timezone} />}
               <time className="subtle" dateTime={item.updated_at}>{format.format(new Date(item.updated_at))}</time>
             </li>)}
           </ul>
