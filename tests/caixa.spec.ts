@@ -27,6 +27,18 @@ test("compartilha notas entre colegas e isola o atendimento de outras clínicas"
     await page.getByLabel("Assunto").fill(subject);
     await page.getByRole("button", { name: "Criar atendimento" }).click();
     await expect(page.getByRole("status")).toHaveText("Atendimento criado.");
+    const assignments = page.getByRole("navigation", { name: "Filtrar por responsável" });
+    await assignments.getByRole("link", { name: "Sem responsável" }).click();
+    await expect(assignments.getByRole("link", { name: "Sem responsável" })).toHaveAttribute("aria-current", "page");
+    await page.getByRole("link", { name: subject, exact: true }).click();
+    await page.getByRole("button", { name: "Assumir atendimento" }).click();
+    await expect(page.getByRole("status")).toHaveText("Você assumiu o atendimento.");
+    await expect(assignments.getByRole("link", { name: "Meus atendimentos" })).toHaveAttribute("aria-current", "page");
+    await page.getByRole("button", { name: "Devolver à fila" }).click();
+    await expect(page.getByRole("status")).toHaveText("Atendimento devolvido à fila.");
+    await expect(assignments.getByRole("link", { name: "Sem responsável" })).toHaveAttribute("aria-current", "page");
+    await page.getByRole("button", { name: "Assumir atendimento" }).click();
+    await expect(page.getByRole("status")).toHaveText("Você assumiu o atendimento.");
     await page.getByLabel("Nota interna").fill(note);
     await page.getByRole("button", { name: "Adicionar nota" }).click();
     await expect(page.getByRole("status")).toHaveText("Nota adicionada.");
@@ -41,6 +53,13 @@ test("compartilha notas entre colegas e isola o atendimento de outras clínicas"
     await colleaguePage.getByRole("link", { name: "Caixa compartilhada" }).click();
     await colleaguePage.getByRole("link", { name: subject, exact: true }).click();
     await expect(colleaguePage.getByText(note, { exact: true })).toBeVisible();
+    await expect(colleaguePage.getByText("Responsável: Atendente " + users[0].id.slice(0, 8), { exact: true })).toBeVisible();
+    await expect(colleaguePage.getByRole("button", { name: "Assumir atendimento" })).toHaveCount(0);
+    const competing = stack.client();
+    expect((await competing.auth.signInWithPassword({ email: users[1].email, password: users[1].password })).error).toBeNull();
+    for (const release of [false, true]) {
+      expect((await competing.rpc("inbox_assign_self", { p_clinic: clinicA, p_thread: thread, p_release: release })).error?.code).toBe("P0001");
+    }
     await colleaguePage.getByRole("button", { name: "Encerrar atendimento" }).click();
     await expect(colleaguePage.getByRole("status")).toHaveText("Atendimento encerrado.");
     await expect(colleaguePage.getByLabel("Nota interna")).toHaveCount(0);
@@ -69,7 +88,19 @@ test("compartilha notas entre colegas e isola o atendimento de outras clínicas"
 
     await colleaguePage.getByRole("button", { name: "Reabrir atendimento" }).click();
     await expect(colleaguePage.getByRole("status")).toHaveText("Atendimento reaberto.");
+    await expect(colleaguePage.getByRole("button", { name: "Assumir atendimento" })).toBeVisible();
     await expect(colleaguePage.getByLabel("Nota interna")).toBeVisible();
+
+    const race = await Promise.all([member, competing].map((client) =>
+      client.rpc("inbox_assign_self", { p_clinic: clinicA, p_thread: thread, p_release: false }),
+    ));
+    expect(race.filter(({ error }) => error === null)).toHaveLength(1);
+    expect(race.find(({ error }) => error)?.error?.code).toBe("P0001");
+    const winner = users[race[0].error ? 1 : 0];
+    const assignee = () => stack.admin.from("inbox_threads").select("assignee_id,assignee_label").eq("id", thread).single();
+    expect(unwrap(await assignee())).toMatchObject({ assignee_id: winner.id });
+    unwrap(await stack.admin.from("clinic_members").delete().eq("clinic_id", clinicA).eq("user_id", winner.id));
+    expect(unwrap(await assignee())).toEqual({ assignee_id: null, assignee_label: null });
   } finally {
     for (const context of contexts) await context.close();
     unwrap(await stack.admin.from("inbox_threads").delete().eq("subject", subject));
