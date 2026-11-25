@@ -82,3 +82,17 @@ button:hover, .button:hover { filter: brightness(.94); }
   .visit { grid-template-columns: 57px minmax(0, 1fr); }
   .visit > .tag { grid-column: 2; }
 }
+
+.inbox-nav { display: flex; flex-wrap: wrap; gap: 8px; margin-block: 14px; }
+.inbox-nav [aria-current="page"] { background: var(--petrol); color: white; }
+.inbox-list { list-style: none; margin: 0; padding: 0; }
+.inbox-list li { padding-block: 10px; border-top: 1px solid var(--line); overflow-wrap: anywhere; }
+.inbox-list time { display: block; }
+.inbox-list span time { display: inline; }
+.inbox-list [aria-current="page"] { font-weight: 750; }
+.inbox-thread { margin-top: 20px; border-top: 1px solid var(--line); padding-top: 20px; overflow-wrap: anywhere; }
+.inbox-note { white-space: pre-wrap; }
+textarea {
+  font: inherit; color: var(--ink); border: 1px solid #b8ccc8;
+  border-radius: 8px; padding: 8px 10px; width: 100%; resize: vertical;
+}

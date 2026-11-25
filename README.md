@@ -1,6 +1,6 @@
 # Clinelo
 
-Recepção digital para clínicas médicas e odontológicas da Domma Tecnologia. A Agenda do Produto reúne os atendimentos do dia, mostra as vagas por profissional e permite agendar, remarcar e cancelar consultas. A consulta de disponibilidade no Google Agenda é opcional. Caixa compartilhada e WhatsApp Business oficial aparecem como desconectados.
+Recepção digital para clínicas médicas e odontológicas da Domma Tecnologia. A Agenda do Produto reúne os atendimentos do dia, mostra as vagas por profissional e permite agendar, remarcar e cancelar consultas. A consulta de disponibilidade no Google Agenda é opcional. A caixa compartilhada organiza os atendimentos internos da equipe. WhatsApp Business oficial aparece como desconectado.
 
 ## Executar localmente
 
@@ -29,7 +29,7 @@ A carga inicial inclui três profissionais e consultas fictícias no próximo di
 Com a pilha local em execução:
 
 ```bash
-# Reinicia apenas o banco local e reaplica as duas migrações e os dados fictícios.
+# Reinicia apenas o banco local e reaplica as migrações e os dados fictícios.
 npm run db -- db reset
 npm run typecheck
 npm run build
@@ -59,3 +59,9 @@ A integração opcional consulta horários ocupados para as vagas exibidas na Ag
 4. Reinicie o aplicativo e consulte um dia com vagas futuras para o profissional vinculado. Use calendários fictícios em desenvolvimento. Guarde a chave no ambiente do servidor e mantenha ambas as variáveis fora do repositório.
 
 A chamada FreeBusy envia o ID do calendário e o intervalo de consulta. Ela retorna períodos ocupados. Nomes de pacientes e detalhes dos eventos ficam fora da consulta. Use `npm run test:google` para verificar a integração com respostas simuladas do provedor.
+
+## Caixa compartilhada
+
+Acesse **Caixa compartilhada** pelo painel da recepção. Crie um atendimento com um assunto e adicione notas internas. Os membros da mesma clínica podem consultar o histórico, encerrar e reabrir o atendimento. A caixa separa os atendimentos em aberto dos encerrados. A carga de desenvolvimento inclui um atendimento fictício por clínica. Em uma pilha local existente, aplique a nova migração com `npm run db -- migration up` para preservar os registros atuais.
+
+As operações verificam o vínculo no banco e serializam mudanças do mesmo atendimento. Se o atendimento já estiver encerrado, reabra antes de adicionar uma nota. Esta versão registra atendimentos manualmente. O WhatsApp Business oficial segue desconectado.
