@@ -1,6 +1,6 @@
 # Clinelo
 
-Recepção digital para clínicas médicas e odontológicas da Domma Tecnologia. A Agenda do Produto reúne os atendimentos do dia, mostra as vagas por profissional e permite agendar, remarcar e cancelar consultas. A consulta de disponibilidade no Google Agenda é opcional. A caixa compartilhada organiza os atendimentos internos da equipe. O recebimento pelo WhatsApp Business oficial é opcional.
+Recepção digital para clínicas médicas e odontológicas da Domma Tecnologia. A Agenda do Produto reúne os atendimentos do dia, mostra as vagas por profissional e permite agendar, remarcar e cancelar consultas. A consulta de disponibilidade no Google Agenda é opcional. A caixa compartilhada organiza os atendimentos internos da equipe. O recebimento e as respostas manuais pelo WhatsApp Business oficial são opcionais.
 
 ## Executar localmente
 
@@ -110,13 +110,26 @@ As operações verificam o vínculo no banco e serializam mudanças do mesmo ate
 
 ## WhatsApp Business oficial
 
-A integração usa os webhooks da WhatsApp Cloud API. Quando habilitada, novas mensagens de texto entram no histórico da caixa da clínica vinculada. Uma mensagem nova reabre o atendimento do mesmo contato, e reentregas do mesmo evento são ignoradas. O histórico identifica a origem como WhatsApp. O remetente é agrupado por um identificador derivado do telefone, e seu número bruto fica fora do cadastro do atendimento. Este recorte cobre recebimento de texto. Anexos, envio de mensagens e eventos de status ficam fora do fluxo.
+A integração usa os webhooks da WhatsApp Cloud API. Quando habilitada, novas mensagens de texto entram no histórico da caixa da clínica vinculada. Uma mensagem nova reabre o atendimento do mesmo contato, e reentregas do mesmo evento são ignoradas. O histórico identifica a origem como WhatsApp. O remetente é agrupado por um identificador derivado do telefone, e seu número bruto fica fora do cadastro do atendimento. A recepção pode responder com texto pela caixa compartilhada. Anexos, modelos de mensagem e confirmações de entrega ficam fora do fluxo.
 
 1. Aplique a migração e disponibilize o endpoint `/api/whatsapp` via HTTPS no servidor do Clinelo.
 2. Configure no servidor `WHATSAPP_APP_SECRET` com o segredo do aplicativo Meta e `WHATSAPP_VERIFY_TOKEN` com um token aleatório para a verificação inicial do webhook. Configure `WHATSAPP_CONTACT_SECRET` com outro segredo aleatório, estável por ambiente. Sua troca muda o agrupamento de novos eventos por contato.
 3. Configure `WHATSAPP_CLINICS_JSON` com um objeto que mapeia cada **Phone Number ID** da Meta ao UUID da clínica. Exemplo fictício `{"10001":"10000000-0000-4000-8000-000000000002"}`. Configure também `SUPABASE_SERVICE_ROLE_KEY` com a chave administrativa do Supabase, exclusivamente no servidor. Mantenha os segredos fora do repositório e do prefixo `NEXT_PUBLIC_`.
 4. No painel da Meta, registre o callback HTTPS e o token de verificação. Assine o campo `messages` da conta do WhatsApp Business. O status **Configurado** na interface indica que há parâmetros no servidor para aquela clínica. Confirme a entrega com um evento de teste da Meta antes de usar o canal.
 
-Para testar localmente com mensagens e assinaturas fictícias, execute `CLINELO_TEST_WHATSAPP=1 npm run test:ui -- tests/whatsapp.spec.ts` com o Supabase local em execução e `.env.local` gerado pelo comando `demo`. O teste cobre verificação do callback, assinatura inválida, número sem vínculo, reentrega simultânea, reabertura e isolamento.
+5. Para habilitar respostas, configure no servidor `WHATSAPP_ACCESS_TOKEN` com acesso ao número mapeado e permissão `whatsapp_business_messaging`. Gere `WHATSAPP_RECIPIENT_KEY` com `openssl rand -base64 32` e compartilhe a mesma chave entre as instâncias do mesmo ambiente. A versão padrão da Graph API é `v24.0` e pode ser configurada com `WHATSAPP_GRAPH_VERSION`.
+6. Depois de configurar o envio, uma nova mensagem do contato com horário válido abre a janela de 24 horas. Abra o atendimento e use **Enviar pelo WhatsApp**. O número necessário ao envio fica cifrado em uma tabela privada. Ao trocar a chave, aguarde uma nova mensagem para que o contato possa receber respostas novamente.
+
+O histórico registra a aceitação pela Meta e sinaliza recusas ou envios sem confirmação. O Clinelo impede a repetição da mesma submissão e mantém tentativas incertas no histórico para conferência. O envio exige uma ação da recepção e não repete tentativas automaticamente.
+
+Para testar localmente com mensagens e assinaturas fictícias, execute `CLINELO_TEST_WHATSAPP=1 npm run test:ui -- tests/whatsapp.spec.ts` com o Supabase local em execução e `.env.local` gerado pelo comando `demo`. O teste cobre verificação do callback, assinatura inválida, número sem vínculo, reentrega simultânea, reabertura, envio simulado, janela de 24 horas, deduplicação de respostas e isolamento.
 
 Na caixa, abra um atendimento em andamento e escolha **Agendar consulta para este atendimento**. A reserva e o vínculo são gravados juntos. As consultas vinculadas aparecem na conversa com a situação atual e um atalho para a data da agenda.
+
+
+## Preparar um piloto
+
+1. Em um projeto Supabase separado para homologação, aplique as migrações em ordem. Para atualizar a pilha local existente, use `npm run db -- migration up`.
+2. Configure o Next.js com a URL e a chave pública do Supabase do piloto. Provisione usuários pelo Supabase Auth e relacione cada um à clínica em `clinic_members`. A carga de demonstração é destinada ao ambiente local.
+3. Valide a agenda e a caixa com dados fictícios de duas clínicas. Inclua um agendamento seguido de remarcação e cancelamento, uma reserva a partir da lista de espera e a verificação de que cada conta enxerga somente sua clínica.
+4. Para exercitar integrações, use as instruções de configuração do Google Agenda e do WhatsApp com contas de teste. A consulta ao Google Agenda usa somente disponibilidade. A Agenda do Produto aplica os bloqueios transacionais às reservas locais.

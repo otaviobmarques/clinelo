@@ -5,6 +5,10 @@ on:
       - 'app/page.tsx'
       - 'app/actions.ts'
       - 'app/caixa/**'
+      - 'app/api/whatsapp/**'
+      - 'lib/whatsapp*.ts'
+      - 'playwright.config.ts'
+      - 'scripts/mock-whatsapp.mjs'
       - 'app/grade/**'
       - 'app/pacientes/**'
       - 'app/painel/**'
@@ -42,6 +46,9 @@ jobs:
       - run: npm run demo -- --env > /dev/null
       - run: npx playwright install --with-deps chromium
       - run: npm run typecheck
+      - run: npm run test:agenda
+      - run: npm run test:google
+      - run: npm run build
       - run: npm run test:ui -- tests/whatsapp.spec.ts tests/caixa.spec.ts tests/recepcao.spec.ts tests/pacientes.spec.ts tests/painel.spec.ts tests/espera.spec.ts --workers=1
         env:
           CLINELO_TEST_WHATSAPP: '1'

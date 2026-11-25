@@ -8,6 +8,10 @@ const whatsappEnv = whatsappEnabled ? {
   WHATSAPP_VERIFY_TOKEN: process.env.CLINELO_TEST_META_VERIFY ??= randomBytes(24).toString("hex"),
   WHATSAPP_CONTACT_SECRET: randomBytes(24).toString("hex"),
   WHATSAPP_CLINICS_JSON: JSON.stringify({ "10001": clinicB }),
+  WHATSAPP_ACCESS_TOKEN: "token-ficticio",
+  WHATSAPP_RECIPIENT_KEY: randomBytes(32).toString("base64"),
+  WHATSAPP_GRAPH_VERSION: "v24.0",
+  NODE_OPTIONS: [process.env.NODE_OPTIONS, "--import=./scripts/mock-whatsapp.mjs"].filter(Boolean).join(" "),
   SUPABASE_SERVICE_ROLE_KEY: localStack().serviceRoleKey,
 } : undefined;
 
