@@ -106,3 +106,9 @@ textarea {
 }
 .agenda-list-filter label { flex: 1 1 180px; max-width: 340px; }
 .visit-status { display: flex; flex-wrap: wrap; gap: 8px; }
+
+.week-section { display: grid; gap: 8px; margin-top: 18px; }
+.week-section > .button { justify-self: start; }
+.week-heading, .week-days li { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.week-days { list-style: none; margin: 12px 0; padding: 0; }
+.week-days li { flex-wrap: wrap; border-top: 1px solid var(--line); padding: 8px 0; font-size: .88rem; }

@@ -39,6 +39,7 @@ export async function changeBooking(form: FormData) {
     day: validDay(day) ? day : undefined,
     professional: validId(professional) ? professional : undefined,
     agendaProfessional: validId(agendaProfessional) ? agendaProfessional : undefined,
+    week: field(form, "week") === "1" ? "1" : undefined,
   };
   const statusChange = Object.hasOwn(statusActions, action);
   const needsSlot = action === "book" || action === "move";

@@ -170,3 +170,47 @@ test("confirma e registra comparecimento ou falta conforme o horário", async ({
     await stack.removeUser(user);
   }
 });
+
+test("compara sete dias de vagas e abre o dia selecionado", async ({ page }) => {
+  const stack = localStack();
+  const user = await stack.user(clinicA, "vagas-semanais");
+  const id = randomUUID();
+  const monday = new Date();
+  monday.setUTCDate(monday.getUTCDate() + 56);
+  while (monday.getUTCDay() !== 1) monday.setUTCDate(monday.getUTCDate() + 1);
+  const offset = (days: number) => new Date(+monday + days * 86_400_000).toISOString().slice(0, 10);
+  const date = offset(0);
+
+  try {
+    unwrap(await stack.admin.from("appointments").insert({
+      id, clinic_id: clinicA, professional_id: professionalA, patient_name: "Paciente fictício " + id,
+      starts_at: date + "T11:00:00Z", ends_at: date + "T11:30:00Z",
+    }));
+    const member = stack.client();
+    expect((await member.auth.signInWithPassword({ email: user.email, password: user.password })).error).toBeNull();
+    expect(unwrap(await member.rpc("agenda_week", { p_clinic: clinicB, p_professional: professionalA, p_from: date }))).toEqual([]);
+
+    await enter(page, user);
+    await page.goto(`/?day=${date}&professional=${professionalA}`);
+    await page.getByRole("link", { name: "Ver vagas da semana" }).click();
+    const week = page.getByRole("region", { name: "Vagas nos próximos 7 dias" });
+    const row = (value: string) => week.getByRole("listitem").filter({ has: page.locator(`time[datetime="${value}"]`) });
+    await expect(week.getByRole("listitem")).toHaveCount(7);
+    await expect(row(date)).toContainText("19 vagas · a partir de 08:30");
+    await expect(row(offset(1))).toContainText("20 vagas · a partir de 08:00");
+    await expect(row(offset(5))).toContainText("Sem vagas");
+    await expect(row(offset(6))).toContainText("Sem vagas");
+
+    await week.getByRole("link", { name: "Sete dias seguintes" }).click();
+    await expect(row(offset(7))).toBeVisible();
+    await week.getByRole("link", { name: "Sete dias anteriores" }).click();
+    await row(offset(1)).getByRole("link").click();
+    await expect(week).toHaveCount(0);
+    await expect(page.getByLabel("Data", { exact: true })).toHaveValue(offset(1));
+    await expect(page.getByRole("combobox", { name: "Profissional", exact: true })).toHaveValue(professionalA);
+    await expect(page.getByLabel("Horário").locator("option", { hasText: "08:00 – 08:30" })).toHaveCount(1);
+  } finally {
+    unwrap(await stack.admin.from("appointments").delete().eq("id", id));
+    await stack.removeUser(user);
+  }
+});

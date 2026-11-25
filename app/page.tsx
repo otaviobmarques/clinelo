@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { WeeklyAvailability, type AvailabilityDay } from "./weekly-availability";
 import { changeBooking, login, logout } from "./actions";
 import {
   agendaUrl, localDay, messages, shiftDay, statusActions, statusLabels, validDay, validId,
@@ -84,6 +85,7 @@ export default async function Page({ searchParams }: { searchParams: Promise<Par
 
   const today = localDay(clinic.timezone);
   const day = validDay(query("day")) ? query("day") : today;
+  const week = query("week") === "1" && validDay(shiftDay(day, 6));
   const edit = validId(query("edit")) ? query("edit") : "";
   const [staff, target] = await Promise.all([
     client.from("professionals").select("id,name").eq("clinic_id", clinic.id).order("name"),
@@ -97,10 +99,13 @@ export default async function Page({ searchParams }: { searchParams: Promise<Par
   const moving = candidate && ["scheduled", "confirmed"].includes(candidate.status) ? candidate : undefined;
   const professional = [query("professional"), moving?.professional_id]
     .map((id) => professionals.find((person) => person.id === id)).find(Boolean) ?? professionals[0];
-  const [agenda, slotResult] = await Promise.all([
+  const [agenda, slotResult, weekResult] = await Promise.all([
     dayQuery,
     professional ? client.rpc("agenda_slots", {
       p_clinic: clinic.id, p_professional: professional.id, p_day: day,
+    }) : null,
+    week && professional ? client.rpc("agenda_week", {
+      p_clinic: clinic.id, p_professional: professional.id, p_from: day,
     }) : null,
   ]);
   const bookings = (agenda.data ?? []) as Booking[];
@@ -111,7 +116,7 @@ export default async function Page({ searchParams }: { searchParams: Promise<Par
       account: process.env.GOOGLE_CALENDAR_SERVICE_ACCOUNT_JSON,
     },
   ) : { status: "disconnected" as const };
-  const scope = { clinic: clinic.id, day, professional: professional?.id, agendaProfessional: agendaProfessional?.id, edit: moving?.id };
+  const scope = { clinic: clinic.id, day, professional: professional?.id, agendaProfessional: agendaProfessional?.id, week: week ? "1" : undefined, edit: moving?.id };
   const dayLabel = new Intl.DateTimeFormat("pt-BR", {
     dateStyle: "full", timeZone: "UTC",
   }).format(new Date(day + "T12:00:00Z"));
@@ -132,6 +137,7 @@ export default async function Page({ searchParams }: { searchParams: Promise<Par
     <input type="hidden" name="day" value={day} />
     <input type="hidden" name="professional" value={professional?.id ?? ""} />
     <input type="hidden" name="agendaProfessional" value={agendaProfessional?.id ?? ""} />
+    {week && <input type="hidden" name="week" value="1" />}
     <input type="hidden" name="appointment" value={booking.id} />
     <input type="hidden" name="revision" value={booking.revision} />
   </>;
@@ -176,6 +182,7 @@ export default async function Page({ searchParams }: { searchParams: Promise<Par
             key={`agenda-list-${agendaProfessional?.id ?? "all"}`}>
             <input type="hidden" name="clinic" value={clinic.id} />
             <input type="hidden" name="day" value={day} />
+            {week && <input type="hidden" name="week" value="1" />}
             {professional && <input type="hidden" name="professional" value={professional.id} />}
             {moving && <input type="hidden" name="edit" value={moving.id} />}
             <label>Profissional da agenda<select name="agendaProfessional" defaultValue={agendaProfessional?.id ?? ""}>
@@ -225,6 +232,7 @@ export default async function Page({ searchParams }: { searchParams: Promise<Par
             {moving && <p className="subtle">{moving.patient_name} · <Link href={agendaUrl({ ...scope, edit: undefined })}>Sair da remarcação</Link></p>}
             <form method="get" className="filters" key={`filters-${agendaUrl(scope)}`}>
               <input type="hidden" name="agendaProfessional" value={agendaProfessional?.id ?? ""} />
+              {week && <input type="hidden" name="week" value="1" />}
               <input type="hidden" name="clinic" value={clinic.id} />
               {moving && <input type="hidden" name="edit" value={moving.id} />}
               <label>Data<input type="date" name="day" defaultValue={day} required /></label>
@@ -239,6 +247,7 @@ export default async function Page({ searchParams }: { searchParams: Promise<Par
               <input type="hidden" name="day" value={day} />
               <input type="hidden" name="professional" value={professional.id} />
               <input type="hidden" name="agendaProfessional" value={agendaProfessional?.id ?? ""} />
+              {week && <input type="hidden" name="week" value="1" />}
               <input type="hidden" name="operation" value={moving ? "move" : "book"} />
               {moving && <>
                 <input type="hidden" name="appointment" value={moving.id} />
@@ -265,6 +274,13 @@ export default async function Page({ searchParams }: { searchParams: Promise<Par
               </> : <p className="empty">Nenhuma vaga disponível para esta data.</p>}
             </form>}
           </section>
+          {professional && validDay(shiftDay(day, 6)) && <div id="semana" className="week-section">
+            {week
+              ? <><WeeklyAvailability scope={scope} day={day} timezone={clinic.timezone} professionalName={professional.name}
+                days={(weekResult?.data ?? []) as AvailabilityDay[]} failed={Boolean(weekResult?.error)} />
+                <Link className="secondary button" href={agendaUrl({ ...scope, week: undefined }) + "#vagas"}>Ocultar visão semanal</Link></>
+              : <Link className="secondary button" href={agendaUrl({ ...scope, week: "1" }) + "#semana"}>Ver vagas da semana</Link>}
+          </div>}
           <Integrations googleStatus={google.status} whatsapp={whatsappConfigured(clinic.id)} />
         </aside>
       </div>
