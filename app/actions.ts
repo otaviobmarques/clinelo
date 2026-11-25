@@ -2,7 +2,7 @@
 
 import { redirect } from "next/navigation";
 import { supabase } from "../lib/supabase";
-import { agendaStatusFilter, agendaUrl, statusActions, validDay, validId } from "../lib/agenda";
+import { agendaPatientQuery, agendaStatusFilter, agendaUrl, statusActions, validDay, validId } from "../lib/agenda";
 
 function field(form: FormData, name: string) {
   const value = form.get(name);
@@ -40,22 +40,31 @@ export async function changeBooking(form: FormData) {
     day: validDay(day) ? day : undefined,
     professional: validId(professional) ? professional : undefined,
     agendaProfessional: validId(agendaProfessional) ? agendaProfessional : undefined,
+    patientQuery: agendaPatientQuery(field(form, "patientQuery")),
+    block: action === "block" ? "1" : undefined,
     agendaStatus: agendaStatusFilter(field(form, "agendaStatus")),
     thread: validId(thread) ? thread : undefined,
     week: field(form, "week") === "1" ? "1" : undefined,
   };
   const statusChange = Object.hasOwn(statusActions, action);
-  const needsSlot = action === "book" || action === "move";
+  const creates = action === "book" || action === "block";
+  const needsSlot = creates || action === "move";
+  const cancels = action === "cancel" || action === "unblock";
   const editing = action === "move" && validId(appointment) ? appointment : undefined;
-  if (!location.clinic || !location.day || (!needsSlot && action !== "cancel" && !statusChange)
-    || (action !== "book" && (!validId(appointment) || !/^\d{1,10}$/.test(revision) || Number(revision) > 2147483647))
+  if (!location.clinic || !location.day || (!needsSlot && !cancels && !statusChange)
+    || (!creates && (!validId(appointment) || !/^\d{1,10}$/.test(revision) || Number(revision) > 2147483647))
     || (needsSlot && (!location.professional || !Number.isFinite(Date.parse(start))))
-    || (action === "book" && ((thread && !location.thread) || !patient || Array.from(patient).length > 120))) {
+    || (action === "book" && ((thread && !location.thread) || !patient))
+    || (creates && Array.from(patient).length > 120) || (action === "block" && thread)) {
     redirect(agendaUrl({ ...location, edit: editing, notice: "invalid" }));
   }
 
   const client = await supabase();
-  const { error } = action === "book" && location.thread
+  const { error } = action === "block"
+    ? await client.rpc("agenda_block", {
+      p_clinic: clinic, p_professional: professional, p_start: new Date(start).toISOString(), p_reason: patient,
+    })
+    : action === "book" && location.thread
     ? await client.rpc("agenda_book_from_inbox", {
       p_clinic: clinic, p_thread: location.thread, p_professional: professional,
       p_start: new Date(start).toISOString(), p_patient: patient,
@@ -64,9 +73,9 @@ export async function changeBooking(form: FormData) {
     ? await client.rpc("agenda_set_status", { p_clinic: clinic, p_appointment: appointment, p_revision: Number(revision), p_status: action })
     : await client.rpc("agenda_change", {
       p_clinic: clinic,
-      p_action: action,
-      p_professional: action === "cancel" ? null : professional,
-      p_start: action === "cancel" ? null : new Date(start).toISOString(),
+      p_action: cancels ? "cancel" : action,
+      p_professional: cancels ? null : professional,
+      p_start: cancels ? null : new Date(start).toISOString(),
       p_patient: action === "book" ? patient : null,
       p_appointment: action === "book" ? null : appointment,
       p_revision: action === "book" ? null : Number(revision),
@@ -76,9 +85,10 @@ export async function changeBooking(form: FormData) {
     "23P01": "conflict", "40P01": "conflict", "42501": "forbidden",
     "22023": "invalid", P0001: "changed",
   };
-  const success = statusChange ? action : action === "book" ? "booked" : action === "move" ? "moved" : "cancelled";
+  const success = action === "block" ? "blocked" : action === "unblock" ? "unblocked" : statusChange ? action : action === "book" ? "booked" : action === "move" ? "moved" : "cancelled";
   redirect(agendaUrl({
     ...location,
+    block: error ? location.block : undefined,
     edit: error?.code === "23P01" || error?.code === "40P01" || error?.code === "22023" ? editing : undefined,
     notice: error ? (location.thread && action === "book" && error.code === "P0001" ? "threadUnavailable" : notices[error.code] ?? "error") : success,
   }));

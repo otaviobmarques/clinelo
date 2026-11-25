@@ -27,7 +27,7 @@ test("recepção agenda, remarca e cancela sem expor outra clínica", async ({ p
     await expect(page.getByText("WhatsApp Business oficial")).toContainText("Desconectado");
     await page.getByLabel("Data", { exact: true }).fill(day.toISOString().slice(0, 10));
     await page.getByRole("button", { name: "Consultar vagas" }).click();
-    const time = page.getByLabel("Horário");
+    const time = page.getByRole("combobox", { name: "Horário", exact: true });
     await expect(time.locator("option").nth(2)).toBeAttached();
     await time.selectOption({ index: 1 });
     await page.getByLabel("Nome do paciente").fill(name);
@@ -223,9 +223,67 @@ test("compara sete dias de vagas e abre o dia selecionado", async ({ page }) => 
     await expect(week).toHaveCount(0);
     await expect(page.getByLabel("Data", { exact: true })).toHaveValue(offset(1));
     await expect(page.getByRole("combobox", { name: "Profissional", exact: true })).toHaveValue(professionalA);
-    await expect(page.getByLabel("Horário").locator("option", { hasText: "08:00 – 08:30" })).toHaveCount(1);
+    await expect(page.getByRole("combobox", { name: "Horário", exact: true }).locator("option", { hasText: "08:00 – 08:30" })).toHaveCount(1);
   } finally {
     unwrap(await stack.admin.from("appointments").delete().eq("id", id));
+    await stack.removeUser(user);
+  }
+});
+
+test("busca paciente e bloqueia ou devolve uma vaga sem sobrepor consultas", async ({ page }) => {
+  const stack = localStack();
+  const user = await stack.user(clinicA, "bloqueio-agenda");
+  const marker = randomUUID();
+  const patient = "Paciente fictício João " + marker;
+  const reason = "Compromisso interno fictício " + marker;
+  const target = new Date();
+  target.setUTCDate(target.getUTCDate() + 91);
+  while ([0, 6].includes(target.getUTCDay())) target.setUTCDate(target.getUTCDate() + 1);
+  const date = target.toISOString().slice(0, 10);
+
+  try {
+    unwrap(await stack.admin.from("appointments").insert({
+      clinic_id: clinicA, professional_id: professionalA, patient_name: patient,
+      starts_at: date + "T12:00:00Z", ends_at: date + "T12:30:00Z",
+    }));
+    const member = stack.client();
+    expect((await member.auth.signInWithPassword({ email: user.email, password: user.password })).error).toBeNull();
+    expect((await member.rpc("agenda_block", {
+      p_clinic: clinicA, p_professional: professionalA, p_start: date + "T12:00:00Z", p_reason: reason,
+    })).error?.code).toBe("23P01");
+
+    await enter(page, user);
+    await page.goto(`/?day=${date}&professional=${professionalA}`);
+    await page.getByRole("link", { name: "Bloquear uma vaga" }).click();
+    await expect(page.getByRole("heading", { name: "Bloquear horário" })).toBeVisible();
+    const time = page.getByRole("combobox", { name: "Horário", exact: true });
+    await time.selectOption({ label: "08:00 – 08:30" });
+    await page.getByLabel("Motivo do bloqueio (opcional)", { exact: true }).fill(reason);
+    await page.getByRole("button", { name: "Confirmar bloqueio" }).click();
+    await expect(page.getByRole("status")).toHaveText("Horário bloqueado.");
+    await expect(time.locator("option", { hasText: "08:00 – 08:30" })).toHaveCount(0);
+    const block = page.getByRole("article").filter({ hasText: reason });
+    const consultation = page.getByRole("article").filter({ hasText: patient });
+    await expect(block.getByText("Bloqueado", { exact: true })).toBeVisible();
+
+    const status = page.getByRole("combobox", { name: "Situação da agenda" });
+    const search = page.getByRole("searchbox", { name: "Buscar paciente" });
+    const filter = page.getByRole("button", { name: "Filtrar agenda" });
+    await status.selectOption("blocked");
+    await filter.click();
+    await expect(consultation).toHaveCount(0);
+    await expect(block).toBeVisible();
+    await block.getByText("Liberar horário", { exact: true }).click();
+    await block.getByRole("button", { name: "Confirmar liberação" }).click();
+    await expect(page.getByRole("status")).toHaveText("Bloqueio liberado.");
+    await expect(time.locator("option", { hasText: "08:00 – 08:30" })).toHaveCount(1);
+    await status.selectOption("");
+    await search.fill("JOAO " + marker);
+    await filter.click();
+    await expect(consultation).toBeVisible();
+    await expect(block).toHaveCount(0);
+  } finally {
+    unwrap(await stack.admin.from("appointments").delete().in("patient_name", [patient, reason]));
     await stack.removeUser(user);
   }
 });

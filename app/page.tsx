@@ -2,7 +2,7 @@ import Link from "next/link";
 import { WeeklyAvailability, type AvailabilityDay } from "./weekly-availability";
 import { changeBooking, login, logout } from "./actions";
 import {
-  agendaStatusFilter, agendaStatusFilters, agendaUrl, bookingIsOpen, localDay, messages, shiftDay, statusActions, statusLabels, validDay, validId,
+  agendaPatientKey, agendaPatientQuery, agendaStatusFilter, agendaStatusFilters, agendaUrl, bookingIsOpen, localDay, messages, shiftDay, statusActions, statusLabels, validDay, validId,
   type Booking, type Clinic, type Professional, type Slot,
 } from "../lib/agenda";
 import { whatsappConfigured } from "../lib/whatsapp";
@@ -40,7 +40,7 @@ function Integrations({ googleStatus, whatsapp }: { googleStatus: GoogleAvailabi
 
 function Notice({ code }: { code: string }) {
   if (!Object.hasOwn(messages, code)) return null;
-  const success = ["booked", "moved", "cancelled"].includes(code) || Object.hasOwn(statusActions, code);
+  const success = ["booked", "moved", "cancelled", "blocked", "unblocked"].includes(code) || Object.hasOwn(statusActions, code);
   return <p className={success ? "notice success" : "notice"} role={success ? "status" : "alert"}>
     {messages[code as keyof typeof messages]}
   </p>;
@@ -102,7 +102,7 @@ export default async function Page({ searchParams }: { searchParams: Promise<Par
   const dayQuery = client.rpc("agenda_day", { p_clinic: clinic.id, p_day: day });
   if (agendaProfessional) dayQuery.eq("professional_id", agendaProfessional.id);
   const candidate = target?.data as Booking | undefined;
-  const moving = candidate && ["scheduled", "confirmed"].includes(candidate.status) ? candidate : undefined;
+  const moving = candidate && !candidate.is_block && ["scheduled", "confirmed"].includes(candidate.status) ? candidate : undefined;
   const professional = [query("professional"), moving?.professional_id]
     .map((id) => professionals.find((person) => person.id === id)).find(Boolean) ?? professionals[0];
   const [agenda, slotResult, weekResult] = await Promise.all([
@@ -116,9 +116,16 @@ export default async function Page({ searchParams }: { searchParams: Promise<Par
   ]);
   const bookings = (agenda.data ?? []) as Booking[];
   const agendaStatus = agendaStatusFilter(query("agendaStatus"));
-  const visibleBookings = agendaStatus === "open"
-    ? bookings.filter(bookingIsOpen)
-    : agendaStatus ? bookings.filter(({ status }) => status === agendaStatus) : bookings;
+  const patientQuery = agendaPatientQuery(query("patientQuery"));
+  const patientKey = agendaPatientKey(patientQuery);
+  const blocking = query("block") === "1" && !moving && !requestedThread;
+  const visibleBookings = bookings.filter((booking) => {
+    if (agendaStatus === "blocked") return booking.is_block && bookingIsOpen(booking) && !patientKey;
+    if (booking.is_block) return !agendaStatus && !patientKey;
+    if (agendaStatus === "open" && !bookingIsOpen(booking)) return false;
+    if (agendaStatus && agendaStatus !== "open" && booking.status !== agendaStatus) return false;
+    return !patientKey || agendaPatientKey(booking.patient_name).includes(patientKey);
+  });
   const slots = (slotResult?.data ?? []) as Slot[];
   const google = professional && (!requestedClinic || selectedClinic) ? await googleAvailability(
     clinic.id, professional.id, slots, {
@@ -126,7 +133,7 @@ export default async function Page({ searchParams }: { searchParams: Promise<Par
       account: process.env.GOOGLE_CALENDAR_SERVICE_ACCOUNT_JSON,
     },
   ) : { status: "disconnected" as const };
-  const scope = { clinic: clinic.id, day, professional: professional?.id, agendaProfessional: agendaProfessional?.id, agendaStatus, week: week ? "1" : undefined, thread: validId(requestedThread) ? requestedThread : undefined, edit: moving?.id };
+  const scope = { clinic: clinic.id, day, professional: professional?.id, agendaProfessional: agendaProfessional?.id, agendaStatus, patientQuery, block: blocking ? "1" : undefined, week: week ? "1" : undefined, thread: validId(requestedThread) ? requestedThread : undefined, edit: moving?.id };
   const dayLabel = new Intl.DateTimeFormat("pt-BR", {
     dateStyle: "full", timeZone: "UTC",
   }).format(new Date(day + "T12:00:00Z"));
@@ -134,11 +141,13 @@ export default async function Page({ searchParams }: { searchParams: Promise<Par
     timeZone: clinic.timezone, hour: "2-digit", minute: "2-digit",
   });
   const formatTime = (value: string) => time.format(new Date(value));
+  const consultations = bookings.filter(({ is_block }) => !is_block);
+  const blockCount = bookings.filter((item) => item.is_block && bookingIsOpen(item)).length;
   const counts = {
-    active: bookings.filter(bookingIsOpen).length,
-    cancelled: bookings.filter(({ status }) => status === "cancelled").length,
-    attended: bookings.filter(({ status }) => status === "attended").length,
-    absent: bookings.filter(({ status }) => status === "absent").length,
+    active: consultations.filter(bookingIsOpen).length,
+    cancelled: consultations.filter(({ status }) => status === "cancelled").length,
+    attended: consultations.filter(({ status }) => status === "attended").length,
+    absent: consultations.filter(({ status }) => status === "absent").length,
   };
 
   const now = Date.now();
@@ -148,6 +157,7 @@ export default async function Page({ searchParams }: { searchParams: Promise<Par
     <input type="hidden" name="professional" value={professional?.id ?? ""} />
     <input type="hidden" name="agendaProfessional" value={agendaProfessional?.id ?? ""} />
     {agendaStatus && <input type="hidden" name="agendaStatus" value={agendaStatus} />}
+    {patientQuery && <input type="hidden" name="patientQuery" value={patientQuery} />}
     {week && <input type="hidden" name="week" value="1" />}
     {scope.thread && <input type="hidden" name="thread" value={scope.thread} />}
     <input type="hidden" name="appointment" value={booking.id} />
@@ -183,6 +193,7 @@ export default async function Page({ searchParams }: { searchParams: Promise<Par
         <section className="card agenda" aria-labelledby="day-title">
           <div className="agenda-head">
             <div><h2 id="day-title">{dayLabel}</h2><p className="subtle">{counts.active} em aberto · {counts.cancelled} cancelados</p>
+              {blockCount > 0 && <p className="subtle">{blockCount} {blockCount === 1 ? "bloqueio ativo" : "bloqueios ativos"}</p>}
               <p className="subtle">{counts.attended} {counts.attended === 1 ? "atendido" : "atendidos"} · {counts.absent} {counts.absent === 1 ? "falta" : "faltas"}</p></div>
             <nav className="date-nav" aria-label="Navegar pela agenda">
               {validDay(shiftDay(day, -1)) && <Link className="secondary button" aria-label="Dia anterior" href={agendaUrl({ ...scope, day: shiftDay(day, -1) })}>‹</Link>}
@@ -191,11 +202,12 @@ export default async function Page({ searchParams }: { searchParams: Promise<Par
             </nav>
           </div>
           <form method="get" className="agenda-list-filter"
-            key={`agenda-list-${agendaProfessional?.id ?? "all"}-${agendaStatus ?? "all"}`}>
+            key={`agenda-list-${agendaProfessional?.id ?? "all"}-${agendaStatus ?? "all"}-${patientQuery}`}>
             <input type="hidden" name="clinic" value={clinic.id} />
             <input type="hidden" name="day" value={day} />
             {week && <input type="hidden" name="week" value="1" />}
             {scope.thread && <input type="hidden" name="thread" value={scope.thread} />}
+            {blocking && <input type="hidden" name="block" value="1" />}
             {professional && <input type="hidden" name="professional" value={professional.id} />}
             {moving && <input type="hidden" name="edit" value={moving.id} />}
             {professionals.length > 1 && <label>Profissional da agenda<select name="agendaProfessional" defaultValue={agendaProfessional?.id ?? ""}>
@@ -206,10 +218,11 @@ export default async function Page({ searchParams }: { searchParams: Promise<Par
               <option value="">Todas as situações</option>
               {Object.entries(agendaStatusFilters).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
             </select></label>
+            <label>Buscar paciente<input name="patientQuery" type="search" defaultValue={patientQuery} maxLength={120} /></label>
             <button className="secondary">Filtrar agenda</button>
           </form>
           <div className="visits">
-            {!agenda.error && !visibleBookings.length && <p className="empty">{agendaStatus ? "Nenhum agendamento corresponde aos filtros." : agendaProfessional ? "Nenhum agendamento para este profissional no dia." : "Nenhum agendamento para este dia."}</p>}
+            {!agenda.error && !visibleBookings.length && <p className="empty">{agendaStatus || patientQuery ? "Nenhum agendamento corresponde aos filtros." : agendaProfessional ? "Nenhum agendamento para este profissional no dia." : "Nenhum agendamento para este dia."}</p>}
             {visibleBookings.map((booking) => <article className="visit" id={"consulta-" + booking.id} key={booking.id}>
               <div className="visit-time"><strong>{formatTime(booking.starts_at)}</strong><span>{formatTime(booking.ends_at)}</span></div>
               <div className="visit-details">
@@ -217,10 +230,10 @@ export default async function Page({ searchParams }: { searchParams: Promise<Par
                 <span>{professionals.find(({ id }) => id === booking.professional_id)?.name ?? "Profissional"}</span>
                 {booking.inbox_thread_id && <Link href={inboxUrl({ clinic: clinic.id, thread: booking.inbox_thread_id })}>Ver atendimento</Link>}
               </div>
-              <span className={booking.status === "cancelled" ? "tag" : "tag active"}>{statusLabels[booking.status]}</span>
+              <span className={booking.status === "cancelled" ? "tag" : "tag active"}>{booking.is_block ? bookingIsOpen(booking) ? "Bloqueado" : "Liberado" : statusLabels[booking.status]}</span>
               {bookingIsOpen(booking) && <div className="visit-actions">
-                <Link href={agendaUrl({ ...scope, professional: booking.professional_id, edit: booking.id }) + "#vagas"}>Remarcar</Link>
-                {(booking.status === "scheduled" || Date.parse(booking.starts_at) <= now) && <details>
+                {!booking.is_block && <Link href={agendaUrl({ ...scope, block: undefined, professional: booking.professional_id, edit: booking.id }) + "#vagas"}>Remarcar</Link>}
+                {!booking.is_block && (booking.status === "scheduled" || Date.parse(booking.starts_at) <= now) && <details>
                   <summary>Situação da consulta</summary>
                   <form action={changeBooking} className="visit-status">
                     {visitFields(booking)}
@@ -233,11 +246,11 @@ export default async function Page({ searchParams }: { searchParams: Promise<Par
                   </form>
                 </details>}
                 <details>
-                  <summary>Cancelar</summary>
+                  <summary>{booking.is_block ? "Liberar horário" : "Cancelar"}</summary>
                   <form action={changeBooking}>
                     {visitFields(booking)}
-                    <input type="hidden" name="operation" value="cancel" />
-                    <button className="danger">Confirmar cancelamento</button>
+                    <input type="hidden" name="operation" value={booking.is_block ? "unblock" : "cancel"} />
+                    <button className="danger">{booking.is_block ? "Confirmar liberação" : "Confirmar cancelamento"}</button>
                   </form>
                 </details>
               </div>}
@@ -246,7 +259,10 @@ export default async function Page({ searchParams }: { searchParams: Promise<Par
         </section>
         <aside>
           <section className="card booking-card" id="vagas" aria-labelledby="booking-title">
-            <h2 id="booking-title">{moving ? "Remarcar consulta" : "Novo agendamento"}</h2>
+            <h2 id="booking-title">{moving ? "Remarcar consulta" : blocking ? "Bloquear horário" : "Novo agendamento"}</h2>
+            {!moving && !requestedThread && <Link href={agendaUrl({ ...scope, block: blocking ? undefined : "1" }) + "#vagas"}>
+              {blocking ? "Voltar ao agendamento" : "Bloquear uma vaga"}
+            </Link>}
             {origin && <p className="subtle">Atendimento: {origin.subject} ·{" "}
               <Link href={inboxUrl({ clinic: clinic.id, status: origin.status === "closed" ? "closed" : "open", thread: origin.id })}>
                 Voltar ao atendimento
@@ -260,10 +276,12 @@ export default async function Page({ searchParams }: { searchParams: Promise<Par
             <form method="get" className="filters" key={`filters-${agendaUrl(scope)}`}>
               <input type="hidden" name="agendaProfessional" value={agendaProfessional?.id ?? ""} />
               {agendaStatus && <input type="hidden" name="agendaStatus" value={agendaStatus} />}
+              {patientQuery && <input type="hidden" name="patientQuery" value={patientQuery} />}
               {week && <input type="hidden" name="week" value="1" />}
               {scope.thread && <input type="hidden" name="thread" value={scope.thread} />}
               <input type="hidden" name="clinic" value={clinic.id} />
               {moving && <input type="hidden" name="edit" value={moving.id} />}
+              {blocking && <input type="hidden" name="block" value="1" />}
               <label>Data<input type="date" name="day" defaultValue={day} required /></label>
               <label>Profissional<select name="professional" defaultValue={professional?.id ?? ""} disabled={!professional}>
                 {!professional && <option value="">Nenhum profissional cadastrado</option>}
@@ -277,9 +295,10 @@ export default async function Page({ searchParams }: { searchParams: Promise<Par
               <input type="hidden" name="professional" value={professional.id} />
               <input type="hidden" name="agendaProfessional" value={agendaProfessional?.id ?? ""} />
               {agendaStatus && <input type="hidden" name="agendaStatus" value={agendaStatus} />}
+              {patientQuery && <input type="hidden" name="patientQuery" value={patientQuery} />}
               {week && <input type="hidden" name="week" value="1" />}
               {scope.thread && <input type="hidden" name="thread" value={scope.thread} />}
-              <input type="hidden" name="operation" value={moving ? "move" : "book"} />
+              <input type="hidden" name="operation" value={moving ? "move" : blocking ? "block" : "book"} />
               {moving && <>
                 <input type="hidden" name="appointment" value={moving.id} />
                 <input type="hidden" name="revision" value={moving.revision} />
@@ -300,8 +319,10 @@ export default async function Page({ searchParams }: { searchParams: Promise<Par
                     {google.status === "checked" && google.occupied.has(slot.starts_at) && " · Ocupado no Google"}
                   </option>)}
                 </select></label>
-                {!moving && <label>Nome do paciente<input name="patient" maxLength={120} required /></label>}
-                <button>{moving ? "Salvar remarcação" : "Agendar consulta"}</button>
+                {!moving && <label>{blocking ? "Motivo do bloqueio (opcional)" : "Nome do paciente"}
+                  <input name="patient" maxLength={120} required={!blocking} />
+                </label>}
+                <button>{moving ? "Salvar remarcação" : blocking ? "Confirmar bloqueio" : "Agendar consulta"}</button>
               </> : <p className="empty">Nenhuma vaga disponível para esta data.</p>}
             </form>}
           </section>
