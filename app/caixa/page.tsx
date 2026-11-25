@@ -3,7 +3,7 @@ import { redirect } from "next/navigation";
 import { logout } from "../actions";
 import { changeInbox } from "./actions";
 import { agendaUrl, validId, type Clinic } from "../../lib/agenda";
-import { channelLabels, inboxChannel, inboxLabels, inboxUrl, type InboxChannel, type InboxStatus } from "../../lib/inbox";
+import { channelLabels, inboxAssignment, inboxChannel, inboxLabels, inboxUrl, type InboxAssignment, type InboxChannel, type InboxStatus } from "../../lib/inbox";
 import { whatsappConfigured } from "../../lib/whatsapp";
 import { supabase, supabaseSettings } from "../../lib/supabase";
 
@@ -26,8 +26,8 @@ const messages = {
   error: "Não foi possível concluir a operação. Tente novamente.",
 };
 
-function Fields({ clinic, thread, operation, status, channel }: {
-  clinic: string; thread?: string; operation: string; status: InboxStatus; channel?: InboxChannel;
+function Fields({ clinic, thread, operation, status, channel, assignment }: {
+  clinic: string; thread?: string; operation: string; status: InboxStatus; channel?: InboxChannel; assignment?: InboxAssignment;
 }) {
   return <>
     <input type="hidden" name="clinic" value={clinic} />
@@ -35,6 +35,7 @@ function Fields({ clinic, thread, operation, status, channel }: {
     <input type="hidden" name="operation" value={operation} />
     <input type="hidden" name="status" value={status} />
     <input type="hidden" name="channel" value={channel ?? ""} />
+    <input type="hidden" name="assignment" value={assignment ?? ""} />
   </>;
 }
 
@@ -47,6 +48,7 @@ export default async function Inbox({ searchParams }: { searchParams: Promise<Pa
   const params = await searchParams;
   const query = (key: string) => typeof params[key] === "string" ? params[key] : "";
   const status = query("status") === "closed" ? "closed" : "open";
+  const assignment = status === "open" ? inboxAssignment(query("assignment")) : undefined;
   const channel = inboxChannel(query("channel"));
   const requestedClinic = query("clinic");
   const requestedThread = query("thread");
@@ -71,6 +73,8 @@ export default async function Inbox({ searchParams }: { searchParams: Promise<Pa
   const queueQuery = client.from("inbox_threads").select("id,subject,status,updated_at,channel,assignee_id,assignee_label")
     .eq("clinic_id", clinic.id).eq("status", status);
   if (channel) queueQuery.eq("channel", channel);
+  if (assignment === "mine") queueQuery.eq("assignee_id", user.id);
+  if (assignment === "unassigned") queueQuery.is("assignee_id", null);
   const [queue, details] = await Promise.all([
     queueQuery.order("updated_at", { ascending: false }).order("id").range(start, start + pageSize),
     canSelectThread ? client.from("inbox_threads").select("id,subject,status,updated_at,channel,assignee_id,assignee_label")
@@ -82,7 +86,7 @@ export default async function Inbox({ searchParams }: { searchParams: Promise<Pa
     .eq("clinic_id", clinic.id).eq("thread_id", thread.id).order("created_at", { ascending: false })
     .order("id", { ascending: false }).range(historyStart, historyStart + historySize) : null;
   const notes = (timeline?.data ?? []) as Note[];
-  const historyLink = (n: number) => inboxUrl(clinic.id, status, thread?.id, undefined, page, channel) + "&historyPage=" + n;
+  const historyLink = (n: number) => inboxUrl(clinic.id, status, thread?.id, undefined, page, channel, assignment) + "&historyPage=" + n;
   const format = new Intl.DateTimeFormat("pt-BR", {
     timeZone: clinic.timezone, dateStyle: "short", timeStyle: "short",
   });
@@ -115,46 +119,53 @@ export default async function Inbox({ searchParams }: { searchParams: Promise<Pa
         <section className="card booking-card" aria-labelledby="queue-title">
           <h2 id="queue-title">Atendimentos</h2>
           <nav className="inbox-nav" aria-label="Filtrar atendimentos">
-            {(["open", "closed"] as const).map((filter) => <Link key={filter} href={inboxUrl(clinic.id, filter, undefined, undefined, 1, channel)}
+            {(["open", "closed"] as const).map((filter) => <Link key={filter} href={inboxUrl(clinic.id, filter, undefined, undefined, 1, channel, assignment)}
               className="secondary button" aria-current={filter === status ? "page" : undefined}>{inboxLabels[filter]}</Link>)}
           </nav>
           <nav className="inbox-nav" aria-label="Filtrar por origem">
             {([undefined, "manual", "whatsapp"] as const).map((origin) => <Link
-              key={origin ?? "all"} href={inboxUrl(clinic.id, status, undefined, undefined, 1, origin)}
+              key={origin ?? "all"} href={inboxUrl(clinic.id, status, undefined, undefined, 1, origin, assignment)}
               className="secondary button" aria-current={origin === channel ? "page" : undefined}>
               {origin ? channelLabels[origin] : "Todas as origens"}
             </Link>)}
           </nav>
+          {status === "open" && <nav className="inbox-nav" aria-label="Filtrar por responsável">
+            {([
+              [undefined, "Toda a equipe"], ["mine", "Meus atendimentos"], ["unassigned", "Sem responsável"],
+            ] as const).map(([value, label]) => <Link key={label}
+              href={inboxUrl(clinic.id, status, undefined, undefined, 1, channel, value)}
+              className="secondary button" aria-current={value === assignment ? "page" : undefined}>{label}</Link>)}
+          </nav>}
           {!queue.error && threads.length === 0 && <p className="empty">Nenhum atendimento neste filtro.</p>}
           <ul className="inbox-list">
             {threads.slice(0, pageSize).map((item) => <li key={item.id}>
               <Link aria-current={thread?.id === item.id ? "page" : undefined}
-                href={inboxUrl(clinic.id, status, item.id, undefined, page, channel)}>{item.subject}</Link>
+                href={inboxUrl(clinic.id, status, item.id, undefined, page, channel, assignment)}>{item.subject}</Link>
               {" "}<span className="tag">{channelLabels[item.channel]}</span>
-              {item.status === "open" && <span className="subtle"> · {item.assignee_label ?? "Sem responsável"} </span>}
+              {item.status === "open" && <span className="subtle"> · {item.assignee_id === user.id ? "Você" : item.assignee_label ?? "Sem responsável"} </span>}
               <time className="subtle" dateTime={item.updated_at}>{format.format(new Date(item.updated_at))}</time>
             </li>)}
           </ul>
           {(page > 1 || threads.length > pageSize) && <nav className="inbox-nav" aria-label="Páginas de atendimentos">
-            {page > 1 && <Link href={inboxUrl(clinic.id, status, undefined, undefined, page - 1, channel)}>Anterior</Link>}
-            {threads.length > pageSize && <Link href={inboxUrl(clinic.id, status, undefined, undefined, page + 1, channel)}>Próxima</Link>}
+            {page > 1 && <Link href={inboxUrl(clinic.id, status, undefined, undefined, page - 1, channel, assignment)}>Anterior</Link>}
+            {threads.length > pageSize && <Link href={inboxUrl(clinic.id, status, undefined, undefined, page + 1, channel, assignment)}>Próxima</Link>}
           </nav>}
           {thread && <article className="inbox-thread">
             <h2>{thread.subject}</h2>
             <p className="subtle">{thread.status === "open" ? "Em aberto" : "Encerrado"} · {channelLabels[thread.channel]}</p>
             {thread.status === "open" && <div>
-              <p>Responsável: {thread.assignee_label ?? "Sem responsável"}</p>
+              <p>Responsável: {thread.assignee_id === user.id ? "Você" : thread.assignee_label ?? "Sem responsável"}</p>
               {(!thread.assignee_id || thread.assignee_id === user.id) && <form action={changeInbox}>
-                <Fields clinic={clinic.id} thread={thread.id} status={status} channel={channel} operation={thread.assignee_id ? "release" : "claim"} />
+                <Fields clinic={clinic.id} thread={thread.id} status={status} channel={channel} assignment={assignment} operation={thread.assignee_id ? "release" : "claim"} />
                 <button className="secondary">{thread.assignee_id ? "Devolver à fila" : "Assumir atendimento"}</button>
               </form>}
             </div>}
             <form action={changeInbox} className="filters">
-              <Fields clinic={clinic.id} thread={thread.id} operation={thread.status === "open" ? "close" : "reopen"} status={thread.status} channel={channel} />
+              <Fields clinic={clinic.id} thread={thread.id} operation={thread.status === "open" ? "close" : "reopen"} status={thread.status} channel={channel} assignment={assignment} />
               <button className="secondary">{thread.status === "open" ? "Encerrar atendimento" : "Reabrir atendimento"}</button>
             </form>
             {thread.status === "open" && <form key={thread.id} action={changeInbox} className="filters">
-              <Fields clinic={clinic.id} thread={thread.id} operation="note" status={thread.status} channel={channel} />
+              <Fields clinic={clinic.id} thread={thread.id} operation="note" status={thread.status} channel={channel} assignment={assignment} />
               <label>Nota interna<textarea name="text" maxLength={2000} required rows={4} /></label>
               <button>Adicionar nota</button>
             </form>}
@@ -176,7 +187,7 @@ export default async function Inbox({ searchParams }: { searchParams: Promise<Pa
         <aside className="card booking-card">
           <h2>Novo atendimento</h2>
           <form action={changeInbox} className="filters">
-            <Fields clinic={clinic.id} operation="create" status={status} channel={channel} />
+            <Fields clinic={clinic.id} operation="create" status={status} channel={channel} assignment={assignment} />
             <label>Assunto<input name="text" maxLength={120} required /></label>
             <button>Criar atendimento</button>
           </form>

@@ -26,7 +26,7 @@ declare
   actor uuid := auth.uid();
   label text;
 begin
-  select coalesce(nullif(u.raw_user_meta_data->>'full_name', ''), u.email, 'Atendente')
+  select coalesce(nullif(btrim(u.raw_user_meta_data->>'full_name'), ''), 'Atendente ' || left(actor::text, 8))
     into label from public.clinic_members m join auth.users u on u.id = m.user_id
     where m.clinic_id = p_clinic and m.user_id = actor for key share of m;
   if not found then
