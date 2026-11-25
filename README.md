@@ -21,7 +21,7 @@ A carga inicial inclui três profissionais e consultas fictícias no próximo di
 
 - O dia segue o fuso da clínica. O campo **Profissional da agenda** filtra a lista e os totais do dia. A escolha de profissional na consulta de vagas é independente. Nesta primeira entrega, a grade tem horários de 30 minutos, das 8h às 18h, de segunda a sexta-feira.
 - A remarcação pode trocar data, horário e profissional da mesma clínica. A revisão da consulta impede que uma operação anterior sobrescreva uma mudança mais recente.
-- A consulta cancelada continua visível no dia e libera a vaga. A restrição de exclusão do PostgreSQL valida sobreposições inclusive durante gravações concorrentes.
+- A recepção pode confirmar a consulta antes do fim do horário, registrar comparecimento a partir do início e registrar falta a partir do fim. A situação aparece na agenda, com totais de atendidos e faltas. A consulta cancelada continua visível no dia e libera a vaga. A restrição de exclusão do PostgreSQL valida sobreposições inclusive durante gravações concorrentes.
 - A sessão do Supabase Auth identifica o usuário. As políticas de linha filtram as leituras por vínculo com a clínica. A operação de escrita verifica o vínculo novamente e executa em uma transação no banco.
 
 ## Testes
