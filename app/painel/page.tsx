@@ -1,3 +1,4 @@
+import { waitingUrl } from "../../lib/waiting";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { logout } from "../actions";
@@ -44,6 +45,7 @@ export default async function ReceptionPage({ searchParams }: {
         <Link className="button secondary" href={agendaUrl({ clinic: clinic.id, day })}>Agenda</Link>
         <Link className="button secondary" href={inboxUrl({ clinic: clinic.id })}>Caixa compartilhada</Link>
         <Link className="button secondary" href={patientsUrl({ clinic: clinic.id })}>Pacientes</Link>
+        <Link className="button secondary" href={waitingUrl({ clinic: clinic.id })}>Lista de espera</Link>
       </nav>
       <form action={logout}><button className="secondary">Sair</button></form>
     </div></header>

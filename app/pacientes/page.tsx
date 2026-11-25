@@ -1,3 +1,4 @@
+import { waitingUrl } from "../../lib/waiting";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { logout } from "../actions";
@@ -184,6 +185,8 @@ export default async function PatientsPage({ searchParams }: {
           </nav>}
           {patient && <section className="inbox-thread" aria-labelledby="patient-history">
             <h2 id="patient-history">Consultas de {patient.name}</h2>
+            {!patient.archived && !scoped.thread && !scoped.appointment && <p className="subtle"><Link
+              href={waitingUrl({ clinic: clinic.id, patient: patient.id })}>Adicionar à lista de espera</Link></p>}
             {!patient.archived && legacy && !legacy.patient_id && <form action={linkPatientVisit} className="filters">
               <input type="hidden" name="clinic" value={clinic.id} />
               <input type="hidden" name="patient" value={patient.id} />
