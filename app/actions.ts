@@ -30,6 +30,7 @@ export async function changeBooking(form: FormData) {
   const agendaProfessional = field(form, "agendaProfessional");
   const action = field(form, "operation");
   const appointment = field(form, "appointment");
+  const thread = field(form, "thread");
   const revision = field(form, "revision");
   const start = field(form, "start");
   const patient = field(form, "patient").trim();
@@ -40,6 +41,7 @@ export async function changeBooking(form: FormData) {
     professional: validId(professional) ? professional : undefined,
     agendaProfessional: validId(agendaProfessional) ? agendaProfessional : undefined,
     agendaStatus: agendaStatusFilter(field(form, "agendaStatus")),
+    thread: validId(thread) ? thread : undefined,
     week: field(form, "week") === "1" ? "1" : undefined,
   };
   const statusChange = Object.hasOwn(statusActions, action);
@@ -48,12 +50,17 @@ export async function changeBooking(form: FormData) {
   if (!location.clinic || !location.day || (!needsSlot && action !== "cancel" && !statusChange)
     || (action !== "book" && (!validId(appointment) || !/^\d{1,10}$/.test(revision) || Number(revision) > 2147483647))
     || (needsSlot && (!location.professional || !Number.isFinite(Date.parse(start))))
-    || (action === "book" && (!patient || Array.from(patient).length > 120))) {
+    || (action === "book" && ((thread && !location.thread) || !patient || Array.from(patient).length > 120))) {
     redirect(agendaUrl({ ...location, edit: editing, notice: "invalid" }));
   }
 
   const client = await supabase();
-  const { error } = statusChange
+  const { error } = action === "book" && location.thread
+    ? await client.rpc("agenda_book_from_inbox", {
+      p_clinic: clinic, p_thread: location.thread, p_professional: professional,
+      p_start: new Date(start).toISOString(), p_patient: patient,
+    })
+    : statusChange
     ? await client.rpc("agenda_set_status", { p_clinic: clinic, p_appointment: appointment, p_revision: Number(revision), p_status: action })
     : await client.rpc("agenda_change", {
       p_clinic: clinic,
@@ -73,6 +80,6 @@ export async function changeBooking(form: FormData) {
   redirect(agendaUrl({
     ...location,
     edit: error?.code === "23P01" || error?.code === "40P01" || error?.code === "22023" ? editing : undefined,
-    notice: error ? notices[error.code] ?? "error" : success,
+    notice: error ? (location.thread && action === "book" && error.code === "P0001" ? "threadUnavailable" : notices[error.code] ?? "error") : success,
   }));
 }

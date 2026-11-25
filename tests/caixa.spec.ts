@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { expect, test, type BrowserContext, type Page } from "@playwright/test";
-import { clinicA, clinicB, localStack, unwrap, type LocalUser } from "../scripts/local-supabase.mjs";
+import { clinicA, clinicB, professionalA, localStack, unwrap, type LocalUser } from "../scripts/local-supabase.mjs";
 
 async function signIn(page: Page, user: LocalUser) {
   await page.goto("/");
@@ -149,6 +149,57 @@ test("busca por assunto combina acentos, texto literal e filtros da clínica", a
     await expect(input).toHaveValue("");
   } finally {
     unwrap(await stack.admin.from("inbox_threads").delete().in("subject", rows.map(({ subject }) => subject)));
+    await stack.removeUser(user);
+  }
+});
+
+test("agenda a partir da conversa e mantém o vínculo no cancelamento", async ({ page }) => {
+  const stack = localStack();
+  const user = await stack.user(clinicA, "vinculo-agenda");
+  const thread = randomUUID();
+  const otherThread = randomUUID();
+  const patient = "Paciente fictício " + thread;
+  const date = new Date();
+  date.setUTCDate(date.getUTCDate() + 77);
+  while ([0, 6].includes(date.getUTCDay())) date.setUTCDate(date.getUTCDate() + 1);
+  const day = date.toISOString().slice(0, 10);
+
+  try {
+    unwrap(await stack.admin.from("inbox_threads").insert([
+      { id: thread, clinic_id: clinicA, subject: "Agendamento fictício" },
+      { id: otherThread, clinic_id: clinicB, subject: "Outra clínica fictícia" },
+    ]));
+    const member = stack.client();
+    expect((await member.auth.signInWithPassword({ email: user.email, password: user.password })).error).toBeNull();
+    expect((await member.rpc("agenda_book_from_inbox", {
+      p_clinic: clinicA, p_thread: otherThread, p_professional: professionalA, p_start: day + "T11:00:00Z", p_patient: patient,
+    })).error?.code).toBe("P0001");
+    expect(unwrap(await member.from("appointments").select("id").eq("patient_name", patient))).toEqual([]);
+
+    await signIn(page, user);
+    await page.goto(`/caixa?clinic=${clinicA}&thread=${thread}`);
+    await page.getByRole("link", { name: "Agendar consulta para este atendimento" }).click();
+    await expect(page.getByRole("link", { name: "Voltar ao atendimento" })).toBeVisible();
+    await page.getByLabel("Data", { exact: true }).fill(day);
+    await page.getByRole("button", { name: "Consultar vagas" }).click();
+    await expect(page).toHaveURL(new RegExp("day=" + day));
+    await page.getByLabel("Horário").selectOption({ label: "08:00 – 08:30" });
+    await page.getByLabel("Nome do paciente").fill(patient);
+    await page.getByRole("button", { name: "Agendar consulta" }).click();
+    await expect(page.getByRole("status")).toHaveText("Agendamento criado.");
+    await page.getByRole("link", { name: "Voltar ao atendimento" }).click();
+    const linked = page.getByRole("listitem").filter({ hasText: "08:00" });
+    await expect(linked).toContainText("Agendado");
+    await linked.getByRole("link").click();
+    const visit = page.getByRole("article").filter({ hasText: patient });
+    await visit.getByText("Cancelar", { exact: true }).click();
+    await visit.getByRole("button", { name: "Confirmar cancelamento" }).click();
+    await expect(page.getByRole("status")).toHaveText("Agendamento cancelado.");
+    await visit.getByRole("link", { name: "Ver atendimento" }).click();
+    await expect(linked).toContainText("Cancelado");
+  } finally {
+    unwrap(await stack.admin.from("appointments").delete().eq("patient_name", patient));
+    unwrap(await stack.admin.from("inbox_threads").delete().in("id", [thread, otherThread]));
     await stack.removeUser(user);
   }
 });

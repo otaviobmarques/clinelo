@@ -2,7 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { logout } from "../actions";
 import { changeInbox } from "./actions";
-import { agendaUrl, validId, type Clinic } from "../../lib/agenda";
+import { agendaUrl, localDay, statusLabels, validId, type Booking, type Clinic } from "../../lib/agenda";
 import { channelLabels, inboxAssignment, inboxChannel, inboxLabels, inboxSearch, inboxUrl, type InboxAssignment, type InboxChannel, type InboxStatus } from "../../lib/inbox";
 import { whatsappConfigured } from "../../lib/whatsapp";
 import { supabase, supabaseSettings } from "../../lib/supabase";
@@ -88,9 +88,13 @@ export default async function Inbox({ searchParams }: { searchParams: Promise<Pa
   ]);
   const threads = (queue.data ?? []) as Thread[];
   const thread = details?.data as Thread | undefined;
-  const timeline = thread ? await client.from("inbox_notes").select("id,body,author_id,created_at,source")
-    .eq("clinic_id", clinic.id).eq("thread_id", thread.id).order("created_at", { ascending: false })
-    .order("id", { ascending: false }).range(historyStart, historyStart + historySize) : null;
+  const [timeline, linkedBookings] = thread ? await Promise.all([
+    client.from("inbox_notes").select("id,body,author_id,created_at,source")
+      .eq("clinic_id", clinic.id).eq("thread_id", thread.id).order("created_at", { ascending: false })
+      .order("id", { ascending: false }).range(historyStart, historyStart + historySize),
+    client.from("appointments").select("id,starts_at,status,professional_id").eq("clinic_id", clinic.id)
+      .eq("inbox_thread_id", thread.id).order("starts_at", { ascending: false }).order("id"),
+  ]) : [null, null];
   const notes = (timeline?.data ?? []) as Note[];
   const historyLink = (n: number) => inboxUrl({ ...filters, thread: thread?.id, page, historyPage: n });
   const format = new Intl.DateTimeFormat("pt-BR", {
@@ -117,7 +121,7 @@ export default async function Inbox({ searchParams }: { searchParams: Promise<Pa
       {Object.hasOwn(messages, notice) && <p className={success ? "notice success" : "notice"} role={success ? "status" : "alert"}>
         {messages[notice as keyof typeof messages]}
       </p>}
-      {(queue.error || details?.error || timeline?.error) && <p className="notice" role="alert">
+      {(queue.error || details?.error || timeline?.error || linkedBookings?.error) && <p className="notice" role="alert">
         Parte da caixa está indisponível. Atualize a página para tentar novamente.
       </p>}
       {canSelectThread && !details?.error && !thread && <p className="notice" role="alert">Atendimento indisponível.</p>}
@@ -184,6 +188,17 @@ export default async function Inbox({ searchParams }: { searchParams: Promise<Pa
               <label>Nota interna<textarea name="text" maxLength={2000} required rows={4} /></label>
               <button>Adicionar nota</button>
             </form>}
+            <h3>Consultas vinculadas</h3>
+            {thread.status === "open" && <Link className="secondary button"
+              href={agendaUrl({ clinic: clinic.id, thread: thread.id }) + "#vagas"}>Agendar consulta para este atendimento</Link>}
+            {Boolean(linkedBookings?.data?.length) && <ul className="inbox-list">
+              {linkedBookings?.data?.map((item) => <li key={item.id}>
+                <Link href={agendaUrl({ clinic: clinic.id, day: localDay(clinic.timezone, new Date(item.starts_at)),
+                  agendaProfessional: item.professional_id }) + "#consulta-" + item.id}>
+                  {format.format(new Date(item.starts_at))}
+                </Link>{" "}· {statusLabels[item.status as Booking["status"]]}
+              </li>)}
+            </ul>}
             <h3>Histórico</h3>
             {!timeline?.error && !notes.length && <p className="empty">{historyPage === 1 ? "Nenhum registro neste atendimento." : "Nenhum registro nesta página."}</p>}
             <ul className="inbox-list">

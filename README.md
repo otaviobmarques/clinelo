@@ -76,3 +76,5 @@ A integração usa os webhooks da WhatsApp Cloud API. Quando habilitada, novas m
 4. No painel da Meta, registre o callback HTTPS e o token de verificação. Assine o campo `messages` da conta do WhatsApp Business. O status **Configurado** na interface indica que há parâmetros no servidor para aquela clínica. Confirme a entrega com um evento de teste da Meta antes de usar o canal.
 
 Para testar localmente com mensagens e assinaturas fictícias, execute `CLINELO_TEST_WHATSAPP=1 npm run test:ui -- tests/whatsapp.spec.ts` com o Supabase local em execução e `.env.local` gerado pelo comando `demo`. O teste cobre verificação do callback, assinatura inválida, número sem vínculo, reentrega simultânea, reabertura e isolamento.
+
+Na caixa, abra um atendimento em andamento e escolha **Agendar consulta para este atendimento**. A reserva e o vínculo são gravados juntos. As consultas vinculadas aparecem na conversa com a situação atual e um atalho para a data da agenda.
