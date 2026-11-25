@@ -1,6 +1,6 @@
 # Clinelo
 
-Recepção digital para clínicas médicas e odontológicas da Domma Tecnologia. A Agenda do Produto reúne os atendimentos do dia, mostra as vagas por profissional e permite agendar, remarcar e cancelar consultas. A interface exibe Google Agenda, caixa compartilhada e WhatsApp Business oficial como desconectados.
+Recepção digital para clínicas médicas e odontológicas da Domma Tecnologia. A Agenda do Produto reúne os atendimentos do dia, mostra as vagas por profissional e permite agendar, remarcar e cancelar consultas. A consulta de disponibilidade no Google Agenda é opcional. Caixa compartilhada e WhatsApp Business oficial aparecem como desconectados.
 
 ## Executar localmente
 
@@ -39,3 +39,23 @@ npm run test:ui
 ```
 
 Os testes criam contas e consultas fictícias temporárias no Supabase local. A suíte da API cobre vagas, conflitos concorrentes, intervalos adjacentes, reversão de remarcação em conflito, revisão desatualizada, cancelamento e isolamento entre clínicas. O teste de navegador percorre o fluxo pela interface e alterna entre as contas das duas clínicas. Caso prefira usar um Chromium já instalado, defina `PLAYWRIGHT_CHROMIUM_EXECUTABLE` com o caminho do executável. Execute os testes com a porta 3000 livre.
+
+## Google Agenda
+
+A integração opcional consulta horários ocupados para as vagas exibidas na Agenda do Produto. A recepção recebe um aviso quando há sobreposição ou quando a consulta externa falha. A consulta é informativa. As gravações continuam regidas pela Agenda do Produto e pela validação transacional do PostgreSQL.
+
+1. Ative a Google Calendar API em um projeto do Google Cloud e crie uma conta de serviço. Compartilhe cada calendário com o e-mail da conta de serviço usando a permissão **Ver apenas disponibilidade (ocultar detalhes)**. A política de compartilhamento da organização precisa permitir esse acesso.
+2. Configure `GOOGLE_CALENDAR_SERVICE_ACCOUNT_JSON` no ambiente do servidor com o JSON da conta de serviço. O Clinelo lê `client_email` e `private_key`.
+3. Configure `GOOGLE_CALENDAR_LINKS_JSON` no ambiente do servidor. Use os UUIDs da clínica e do profissional cadastrados no Clinelo e o ID do calendário compartilhado. Exemplo com identificadores fictícios:
+
+   ```json
+   {
+     "10000000-0000-4000-8000-000000000001": {
+       "20000000-0000-4000-8000-000000000001": "agenda-ficticia@example.test"
+     }
+   }
+   ```
+
+4. Reinicie o aplicativo e consulte um dia com vagas futuras para o profissional vinculado. Use calendários fictícios em desenvolvimento. Guarde a chave no ambiente do servidor e mantenha ambas as variáveis fora do repositório.
+
+A chamada FreeBusy envia o ID do calendário e o intervalo de consulta. Ela retorna períodos ocupados. Nomes de pacientes e detalhes dos eventos ficam fora da consulta. Use `npm run test:google` para verificar a integração com respostas simuladas do provedor.

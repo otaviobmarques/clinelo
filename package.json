@@ -13,7 +13,8 @@
     "test:agenda": "node --test scripts/agenda.test.mjs",
     "db": "supabase",
     "demo": "node scripts/demo.mjs",
-    "test:ui": "playwright test"
+    "test:ui": "playwright test",
+    "test:google": "node --experimental-strip-types --test scripts/google-calendar.test.mjs"
   },
   "dependencies": {
     "@supabase/ssr": "^0.12.7",
