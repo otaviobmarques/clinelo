@@ -77,7 +77,7 @@ test("recebe texto assinado, ignora reenvios e isola a caixa da clínica", async
     await whatsappFilter.click();
     await expect(whatsappFilter).toHaveAttribute("aria-current", "page");
     const queue = page.getByRole("region", { name: "Atendimentos" });
-    const whatsappLink = queue.locator(`a[href*="thread=${threadId}"]`);
+    const whatsappLink = queue.locator(`a[href^="/caixa?"][href*="thread=${threadId}"]`);
     await expect(whatsappLink).toBeVisible();
     await whatsappLink.click();
     await page.getByRole("button", { name: "Encerrar atendimento" }).click();

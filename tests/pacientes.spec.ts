@@ -197,3 +197,52 @@ test("localiza por contato e vincula ou desvincula uma consulta antiga", async (
     await stack.removeUser(user);
   }
 });
+
+test("associa a conversa à ficha e reaproveita o paciente para consultar vagas", async ({ page }) => {
+  const stack = localStack();
+  const user = await stack.user(clinicA, "paciente-conversa");
+  const thread = randomUUID();
+  const patient = randomUUID();
+  const otherPatient = randomUUID();
+  const subject = "Conversa fictícia " + thread;
+  const name = "Pessoa Fictícia " + patient;
+
+  try {
+    unwrap(await stack.admin.from("patients").insert([
+      { id: patient, clinic_id: clinicA, name },
+      { id: otherPatient, clinic_id: clinicB, name: "Pessoa de outra clínica fictícia" },
+    ]));
+    const row = unwrap(await stack.admin.from("inbox_threads").insert({ id: thread, clinic_id: clinicA, subject })
+      .select("patient_link_revision").single());
+    const member = stack.client();
+    expect((await member.auth.signInWithPassword({ email: user.email, password: user.password })).error).toBeNull();
+    const link = { p_clinic: clinicA, p_thread: thread, p_patient: patient, p_revision: row?.patient_link_revision };
+    expect((await member.rpc("inbox_link_patient", { ...link, p_patient: otherPatient })).error?.code).toBe("P0001");
+
+    await enter(page, user);
+    await page.goto(`/caixa?clinic=${clinicA}&thread=${thread}`);
+    await page.getByRole("link", { name: "Vincular paciente ao atendimento" }).click();
+    await page.getByRole("link", { name, exact: true }).click();
+    await page.getByRole("button", { name: "Confirmar vínculo do atendimento" }).click();
+    await expect(page.getByRole("status")).toHaveText("Paciente vinculado ao atendimento.");
+    await expect(page.getByText("Atendimento vinculado à ficha do paciente.")).toBeVisible();
+    expect((await member.rpc("inbox_link_patient", { ...link, p_unlink: true })).error?.code).toBe("P0001");
+    await page.getByRole("link", { name: "Agendar para o paciente vinculado" }).click();
+    await expect(page.getByRole("link", { name: "Voltar à ficha" })).toBeVisible();
+    await expect(page).toHaveURL(new RegExp("patientId=" + patient));
+    await expect(page.getByLabel("Nome do paciente")).toHaveCount(0);
+    await page.getByRole("link", { name: "Voltar à ficha" }).click();
+    const conversations = page.getByRole("region", { name: "Atendimentos de " + name });
+    await expect(conversations.getByRole("link", { name: subject })).toBeVisible();
+    await conversations.getByRole("link", { name: subject }).click();
+    await page.getByText("Remover vínculo do paciente", { exact: true }).click();
+    await page.getByRole("button", { name: "Confirmar remoção do vínculo" }).click();
+    await expect(page.getByRole("status")).toHaveText("Paciente desvinculado do atendimento.");
+    await expect(page.getByText("Vínculo com a ficha do paciente removido.")).toBeVisible();
+    await expect(page.getByRole("link", { name: "Vincular paciente ao atendimento" })).toBeVisible();
+  } finally {
+    unwrap(await stack.admin.from("inbox_threads").delete().eq("id", thread));
+    unwrap(await stack.admin.from("patients").delete().in("id", [patient, otherPatient]));
+    await stack.removeUser(user);
+  }
+});
