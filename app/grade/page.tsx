@@ -1,3 +1,4 @@
+import { Navigation } from "../navigation";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { logout } from "../actions";
@@ -99,7 +100,7 @@ export default async function Grade({ searchParams }: { searchParams: Promise<Pa
   const notice = query("notice");
 
   return <>
-    <header className="topbar"><div className="topbar-inner">
+    <Navigation clinic={clinic.id} /><header className="topbar"><div className="topbar-inner">
       <Link href={agendaUrl({ clinic: clinic.id, professional: professional?.id })} className="secondary button">Voltar à agenda</Link>
       <form action={logout}><button className="secondary">Sair</button></form>
     </div></header>

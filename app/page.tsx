@@ -1,3 +1,4 @@
+import { Navigation } from "./navigation";
 import { receptionUrl } from "../lib/reception";
 import Link from "next/link";
 import { WeeklyAvailability, type AvailabilityDay } from "./weekly-availability";
@@ -18,7 +19,7 @@ export const dynamic = "force-dynamic";
 type Params = Record<string, string | string[] | undefined>;
 
 function Brand() {
-  return <div className="brand"><span className="mark" aria-hidden="true">+</span>
+  return <div className="brand">
     <div><strong>Clinelo</strong><small>Domma Tecnologia</small></div></div>;
 }
 
@@ -59,7 +60,7 @@ export default async function Page({ searchParams }: { searchParams: Promise<Par
 
   const client = await supabase();
   const { data: { user } } = await client.auth.getUser();
-  if (!user) return <main className="login-shell"><Brand />
+  if (!user) return <main className="login-experience"><section className="login-story"><Link className="wordmark" href="/conheca">Clinelo</Link><p className="kicker">SUA CLÍNICA, CONECTADA</p><h1>O cuidado começa<br/>com uma boa<br/>recepção.</h1><p>Uma rotina mais organizada para quem cuida de cada detalhe do atendimento.</p><span>Domma Tecnologia</span></section><div className="login-panel"><Brand />
     <section className="card login">
       <h1>Acesse sua recepção</h1>
       <p>Entre com a conta vinculada à sua clínica.</p>
@@ -69,7 +70,7 @@ export default async function Page({ searchParams }: { searchParams: Promise<Par
         <label>Senha<input type="password" name="password" autoComplete="current-password" required /></label>
         <button>Entrar</button>
       </form>
-    </section>
+    </section><p className="login-help">Precisa de acesso? Fale com o administrador da sua clínica.</p><Link href="/conheca">Conheça o Clinelo</Link></div>
   </main>;
 
   const clinicResult = await client.from("clinics").select("id,name,timezone").order("name");
@@ -200,7 +201,7 @@ export default async function Page({ searchParams }: { searchParams: Promise<Par
   </>;
 
   return <>
-    <header className="topbar"><div className="topbar-inner">
+    <Navigation clinic={clinic.id} /><header className="topbar"><div className="topbar-inner">
       <Brand />
       <nav className="date-nav" aria-label="Recepção">
         <Link href={receptionUrl(clinic.id)} className="secondary button">Painel</Link>

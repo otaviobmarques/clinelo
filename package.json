@@ -17,11 +17,13 @@
     "test:google": "node --experimental-strip-types --test scripts/google-calendar.test.mjs"
   },
   "dependencies": {
+    "@remotion/player": "^4.0.547",
     "@supabase/ssr": "^0.12.7",
     "@supabase/supabase-js": "^2.119.2",
     "next": "^16.4.6",
     "react": "^19.3.1",
-    "react-dom": "^19.3.1"
+    "react-dom": "^19.3.1",
+    "remotion": "^4.0.547"
   },
   "devDependencies": {
     "@playwright/test": "^1.65.1",
