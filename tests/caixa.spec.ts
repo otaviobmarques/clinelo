@@ -27,6 +27,9 @@ test("compartilha notas entre colegas e isola o atendimento de outras clínicas"
     await page.getByLabel("Assunto", { exact: true }).fill(subject);
     await page.getByRole("button", { name: "Criar atendimento" }).click();
     await expect(page.getByRole("status")).toHaveText("Atendimento criado.");
+    const waitLabel = page.locator("li").filter({ has: page.getByRole("link", { name: subject, exact: true }) }).getByText(/Na fila há/);
+    await expect(waitLabel).toBeVisible();
+    const initialWait = await waitLabel.getAttribute("datetime");
     const assignments = page.getByRole("navigation", { name: "Filtrar por responsável" });
     await assignments.getByRole("link", { name: "Sem responsável" }).click();
     await expect(assignments.getByRole("link", { name: "Sem responsável" })).toHaveAttribute("aria-current", "page");
@@ -34,7 +37,10 @@ test("compartilha notas entre colegas e isola o atendimento de outras clínicas"
     await page.getByRole("button", { name: "Assumir atendimento" }).click();
     await expect(page.getByRole("status")).toHaveText("Você assumiu o atendimento.");
     await expect(assignments.getByRole("link", { name: "Meus atendimentos" })).toHaveAttribute("aria-current", "page");
+    await expect(waitLabel).toHaveCount(0);
     await page.getByRole("button", { name: "Devolver à fila" }).click();
+    await expect(waitLabel).toBeVisible();
+    expect(await waitLabel.getAttribute("datetime")).not.toBe(initialWait);
     await expect(page.getByRole("status")).toHaveText("Atendimento devolvido à fila.");
     await expect(assignments.getByRole("link", { name: "Sem responsável" })).toHaveAttribute("aria-current", "page");
     await page.getByRole("button", { name: "Assumir atendimento" }).click();
