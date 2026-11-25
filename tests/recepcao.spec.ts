@@ -53,7 +53,8 @@ test("recepção agenda, remarca e cancela sem expor outra clínica", async ({ p
     await expect(page.getByRole("heading", { name: "Acesse sua recepção" })).toBeVisible();
     await enter(page, users[1]);
     await page.goto(otherClinicUrl);
-    await expect(page.getByLabel("Clínica", { exact: true })).toHaveValue(clinicB);
+    await expect(page.getByRole("combobox", { name: "Clínica", exact: true })).toHaveValue(clinicB);
+    await expect(page.getByRole("alert")).toHaveText("Você não tem acesso à clínica solicitada.");
     await expect(page.getByRole("article").filter({ hasText: name })).toHaveCount(0);
   } finally {
     unwrap(await stack.admin.from("appointments").delete().eq("patient_name", name));

@@ -4,7 +4,7 @@ Recepção digital para clínicas médicas e odontológicas da Domma Tecnologia.
 
 ## Executar localmente
 
-Requisitos: Node.js 22 ou superior, Docker em execução e [Supabase CLI](https://supabase.com/docs/guides/local-development/cli/getting-started) disponível no PATH. O ambiente foi validado com Supabase CLI 2.76.8 e PostgreSQL 17. As portas locais padrão são 3000 (Next.js), 54321 (API) e 54322 (PostgreSQL).
+Use Node.js 22 ou superior, Docker em execução e uma versão 2.x recente da [Supabase CLI](https://supabase.com/docs/guides/local-development/cli/getting-started) disponível no PATH. A configuração local usa PostgreSQL 17. As portas padrão são 3000 (Next.js), 54321 (API) e 54322 (PostgreSQL).
 
 ```bash
 npm ci
