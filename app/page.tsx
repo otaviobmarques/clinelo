@@ -123,7 +123,7 @@ export default async function Page({ searchParams }: { searchParams: Promise<Par
     <header className="topbar"><div className="topbar-inner">
       <Brand />
       <nav className="date-nav" aria-label="Recepção">
-        <Link href={inboxUrl(clinic.id)} className="secondary button">Caixa compartilhada</Link>
+        <Link href={inboxUrl({ clinic: clinic.id })} className="secondary button">Caixa compartilhada</Link>
         <form action={logout}><button className="secondary">Sair</button></form>
       </nav>
     </div></header>

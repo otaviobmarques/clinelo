@@ -2,7 +2,7 @@
 
 import { redirect } from "next/navigation";
 import { validId } from "../../lib/agenda";
-import { inboxAssignment, inboxChannel, inboxUrl } from "../../lib/inbox";
+import { inboxAssignment, inboxChannel, inboxSearch, inboxUrl } from "../../lib/inbox";
 import { supabase } from "../../lib/supabase";
 
 export async function changeInbox(form: FormData) {
@@ -13,12 +13,13 @@ export async function changeInbox(form: FormData) {
   const status = form.get("status") === "closed" ? "closed" : "open";
   const assignment = inboxAssignment(form.get("assignment"));
   const channel = inboxChannel(form.get("channel"));
-  if (!validId(clinic)) redirect(inboxUrl(undefined, status, undefined, "invalid", 1, channel, assignment));
+  const location = { clinic: validId(clinic) ? clinic : undefined, status, channel, assignment, query: inboxSearch(form.get("q")) } as const;
+  if (!location.clinic) redirect(inboxUrl({ ...location, notice: "invalid" }));
   const selected = validId(thread) ? thread : undefined;
   if (!["create", "note", "close", "reopen", "claim", "release"].includes(operation)
     || (operation !== "create" && !selected)
     || (["create", "note"].includes(operation) && (!text || Array.from(text).length > (operation === "create" ? 120 : 2000)))) {
-    redirect(inboxUrl(clinic, status, selected, "invalid", 1, channel, assignment));
+    redirect(inboxUrl({ ...location, thread: selected, notice: "invalid" }));
   }
 
   const client = await supabase();
@@ -30,7 +31,7 @@ export async function changeInbox(form: FormData) {
 
   if (error) {
     const code = error.code === "42501" ? "access" : error.code === "P0001" ? "changed" : "error";
-    redirect(inboxUrl(clinic, status, selected, code, 1, channel, assignment));
+    redirect(inboxUrl({ ...location, thread: selected, notice: code }));
   }
 
   const nextStatus = operation === "close" ? "closed" : operation === "note" ? status : "open";
@@ -38,5 +39,5 @@ export async function changeInbox(form: FormData) {
   let nextAssignment = assignment;
   if (operation === "claim" && assignment === "unassigned") nextAssignment = "mine";
   if (assignment === "mine" && ["release", "create"].includes(operation)) nextAssignment = "unassigned";
-  redirect(inboxUrl(clinic, nextStatus, data, operation, 1, nextChannel, nextAssignment));
+  redirect(inboxUrl({ ...location, status: nextStatus, thread: data, notice: operation, channel: nextChannel, assignment: nextAssignment, query: operation === "create" ? undefined : location.query }));
 }
