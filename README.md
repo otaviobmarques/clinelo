@@ -86,6 +86,10 @@ A integração opcional consulta horários ocupados para as vagas exibidas na Ag
 A chamada FreeBusy envia o ID do calendário e o intervalo de consulta. Ela retorna períodos ocupados. Nomes de pacientes e detalhes dos eventos ficam fora da consulta. Use `npm run test:google` para verificar a integração com respostas simuladas do provedor.
 
 
+## Painel da recepção
+
+Use **Painel** na agenda ou na caixa para consultar os totais de hoje e os próximos horários da clínica. A seção de atendimento mostra a fila atual e os cinco atendimentos há mais tempo sem responsável, quando o horário de entrada está registrado. Os números e itens abrem os filtros ou registros correspondentes.
+
 ## Cadastro de pacientes
 
 Acesse **Pacientes** pela agenda. A ficha tem nome e contatos opcionais, busca por nome, telefone ou e-mail e histórico de consultas vinculadas. Pode ser editada, arquivada e reativada pela equipe da clínica. Um cadastro arquivado preserva seu histórico e fica indisponível para novos agendamentos.

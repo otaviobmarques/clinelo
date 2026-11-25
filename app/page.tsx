@@ -1,3 +1,4 @@
+import { receptionUrl } from "../lib/reception";
 import Link from "next/link";
 import { WeeklyAvailability, type AvailabilityDay } from "./weekly-availability";
 import { changeBooking, login, logout } from "./actions";
@@ -202,6 +203,7 @@ export default async function Page({ searchParams }: { searchParams: Promise<Par
     <header className="topbar"><div className="topbar-inner">
       <Brand />
       <nav className="date-nav" aria-label="Recepção">
+        <Link href={receptionUrl(clinic.id)} className="secondary button">Painel</Link>
         {gradeAccess.data?.can_manage_hours && <Link href={gradeUrl({ clinic: clinic.id })} className="secondary button">Administrar grade</Link>}
         <Link href={patientsUrl({ clinic: clinic.id })} className="secondary button">Pacientes</Link>
         <Link href={inboxUrl({ clinic: clinic.id })} className="secondary button">Caixa compartilhada</Link>

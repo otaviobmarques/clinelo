@@ -1,3 +1,4 @@
+import { receptionUrl } from "../../lib/reception";
 import { QueueWait } from "./queue-wait";
 import Link from "next/link";
 import { redirect } from "next/navigation";
@@ -116,7 +117,10 @@ export default async function Inbox({ searchParams }: { searchParams: Promise<Pa
 
   return <>
     <header className="topbar"><div className="topbar-inner">
-      <Link href={agendaUrl({ clinic: clinic.id })} className="button secondary">Voltar à agenda</Link>
+      <nav className="date-nav" aria-label="Recepção">
+        <Link href={receptionUrl(clinic.id)} className="secondary button">Painel</Link>
+        <Link href={agendaUrl({ clinic: clinic.id })} className="button secondary">Voltar à agenda</Link>
+      </nav>
       <form action={logout}><button className="secondary">Sair</button></form>
     </div></header>
     <main className="workspace">

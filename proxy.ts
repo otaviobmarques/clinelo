@@ -22,4 +22,4 @@ export async function proxy(request: NextRequest) {
   return response;
 }
 
-export const config = { matcher: ["/", "/caixa", "/grade", "/pacientes"] };
+export const config = { matcher: ["/", "/caixa", "/grade", "/pacientes", "/painel"] };
