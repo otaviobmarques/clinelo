@@ -99,3 +99,9 @@ textarea {
 
 .inbox-search { display: flex; flex-wrap: wrap; align-items: end; gap: 8px; margin-top: 14px; }
 .inbox-search label { flex: 1 1 210px; }
+
+.agenda-list-filter {
+  display: flex; align-items: end; flex-wrap: wrap; gap: 8px;
+  border-bottom: 1px solid var(--line); padding: 14px 24px;
+}
+.agenda-list-filter label { flex: 1 1 180px; max-width: 340px; }

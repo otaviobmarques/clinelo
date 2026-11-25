@@ -1,11 +1,14 @@
-name: Teste da caixa no Chromium
+name: Testes da recepção no Chromium
 on:
   pull_request:
     paths:
+      - 'app/page.tsx'
+      - 'app/actions.ts'
       - 'app/caixa/**'
       - 'lib/inbox.ts'
       - 'tests/whatsapp.spec.ts'
       - 'tests/caixa.spec.ts'
+      - 'tests/recepcao.spec.ts'
       - 'supabase/migrations/**'
       - '.github/workflows/test-caixa.yml'
 permissions:
@@ -28,6 +31,6 @@ jobs:
       - run: npm run demo -- --env > /dev/null
       - run: npx playwright install --with-deps chromium
       - run: npm run typecheck
-      - run: npm run test:ui -- tests/whatsapp.spec.ts tests/caixa.spec.ts --workers=1
+      - run: npm run test:ui -- tests/whatsapp.spec.ts tests/caixa.spec.ts tests/recepcao.spec.ts --workers=1
         env:
           CLINELO_TEST_WHATSAPP: '1'

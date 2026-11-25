@@ -62,3 +62,62 @@ test("recepção agenda, remarca e cancela sem expor outra clínica", async ({ p
     for (const user of users) await stack.removeUser(user);
   }
 });
+
+test("filtra a agenda por profissional sem mudar a consulta de vagas", async ({ page }) => {
+  const stack = localStack();
+  const user = await stack.user(clinicA, "filtro-agenda");
+  const marker = randomUUID();
+  const day = new Date();
+  day.setUTCDate(day.getUTCDate() + 35);
+  while ([0, 6].includes(day.getUTCDay())) day.setUTCDate(day.getUTCDate() + 1);
+  const date = day.toISOString().slice(0, 10);
+  const marina = `Paciente fictício Marina ${marker}`;
+  const lucas = `Paciente fictício Lucas ${marker}`;
+
+  try {
+    const staff = unwrap(await stack.admin.from("professionals").select("id,name").eq("clinic_id", clinicA)) ?? [];
+    const marinaId = staff.find(({ name }) => name.includes("Marina"))!.id;
+    const lucasId = staff.find(({ name }) => name.includes("Lucas"))!.id;
+    unwrap(await stack.admin.from("appointments").insert([
+      { clinic_id: clinicA, professional_id: marinaId, patient_name: marina, starts_at: date + "T11:00:00Z", ends_at: date + "T11:30:00Z" },
+      { clinic_id: clinicA, professional_id: lucasId, patient_name: lucas, starts_at: date + "T11:00:00Z", ends_at: date + "T11:30:00Z" },
+    ]));
+
+    await enter(page, user);
+    await page.goto(`/?day=${date}&professional=${lucasId}`);
+    const visit = (name: string) => page.getByRole("article").filter({ hasText: name });
+    const listFilter = page.getByRole("combobox", { name: "Profissional da agenda" });
+    const slotFilter = page.getByRole("combobox", { name: "Profissional", exact: true });
+    await expect(visit(marina)).toBeVisible();
+    await expect(visit(lucas)).toBeVisible();
+
+    await listFilter.selectOption(marinaId);
+    await page.getByRole("button", { name: "Filtrar agenda" }).click();
+    await expect(visit(lucas)).toHaveCount(0);
+    await expect(visit(marina)).toBeVisible();
+    await expect(page.getByText("1 em aberto · 0 cancelados")).toBeVisible();
+    await expect(slotFilter).toHaveValue(lucasId);
+
+    await page.getByRole("button", { name: "Consultar vagas" }).click();
+    await expect(listFilter).toHaveValue(marinaId);
+    await page.getByRole("link", { name: "Próximo dia" }).click();
+    await expect(page.getByText("Nenhum agendamento para este profissional no dia.")).toBeVisible();
+    await page.getByRole("link", { name: "Dia anterior" }).click();
+    await expect(visit(marina)).toBeVisible();
+
+    await visit(marina).getByText("Cancelar", { exact: true }).click();
+    await visit(marina).getByRole("button", { name: "Confirmar cancelamento" }).click();
+    await expect(page.getByRole("status")).toHaveText("Agendamento cancelado.");
+    await expect(listFilter).toHaveValue(marinaId);
+    await expect(slotFilter).toHaveValue(lucasId);
+    await expect(page.getByText("0 em aberto · 1 cancelados")).toBeVisible();
+
+    await listFilter.selectOption("");
+    await page.getByRole("button", { name: "Filtrar agenda" }).click();
+    await expect(visit(lucas)).toBeVisible();
+    await expect(visit(marina)).toBeVisible();
+  } finally {
+    unwrap(await stack.admin.from("appointments").delete().in("patient_name", [marina, lucas]));
+    await stack.removeUser(user);
+  }
+});
