@@ -54,6 +54,7 @@ export const messages = {
   confirmed: "Consulta confirmada.",
   attended: "Comparecimento registrado.",
   absent: "Falta registrada.",
+  attendanceUndone: "Registro de presença desfeito.",
   threadUnavailable: "O atendimento não está aberto para receber uma consulta.",
   conflict: "O horário acabou de ser ocupado. Escolha outra vaga.",
   changed: "O agendamento já foi alterado. Confira a agenda atualizada.",

@@ -180,6 +180,23 @@ test("confirma e registra comparecimento ou falta conforme o horário", async ({
       p_revision: 0, p_action: "cancel" })).error?.code).toBe("P0001");
     expect((await member.rpc("agenda_set_status", { ...payload, p_appointment: cases[1].id, p_revision: 1,
       p_status: "absent" })).error?.code).toBe("P0001");
+
+    const visit = page.getByRole("article").filter({ hasText: name(cases[1].id) });
+    await visit.getByRole("link", { name: "Ver histórico" }).click();
+    const history = page.getByRole("region", { name: "Histórico da consulta" });
+    await expect(history.getByText("Agendado → Atendido")).toBeVisible();
+    await expect(history.getByText("Agendamento criado")).toBeVisible();
+    await history.getByText("Corrigir comparecimento ou falta", { exact: true }).click();
+    await history.getByRole("button", { name: "Desfazer registro de presença" }).click();
+    await expect(page.getByRole("status")).toHaveText("Registro de presença desfeito.");
+    await expect(history.getByText("Atendido → Agendado")).toBeVisible();
+    await expect(history.getByText("Agendado → Atendido")).toBeVisible();
+    await expect(visit.getByText("Agendado", { exact: true })).toBeVisible();
+
+    const undo = { p_clinic: clinicA, p_appointment: cases[1].id, p_revision: 1 };
+    expect((await member.rpc("agenda_undo_attendance", undo)).error?.code).toBe("P0001");
+    expect((await member.rpc("agenda_undo_attendance", { ...undo, p_clinic: clinicB })).error?.code).toBe("42501");
+    expect((await stack.client().from("appointment_events").select("id")).error?.code).toBe("42501");
   } finally {
     unwrap(await stack.admin.from("appointments").delete().in("id", cases.map(({ id }) => id)));
     await stack.removeUser(user);

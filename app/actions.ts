@@ -33,6 +33,7 @@ export async function changeBooking(form: FormData) {
   const thread = field(form, "thread");
   const revision = field(form, "revision");
   const start = field(form, "start");
+  const history = field(form, "history");
   const patient = field(form, "patient").trim();
 
   const location = {
@@ -43,15 +44,17 @@ export async function changeBooking(form: FormData) {
     patientQuery: agendaPatientQuery(field(form, "patientQuery")),
     block: action === "block" ? "1" : undefined,
     agendaStatus: agendaStatusFilter(field(form, "agendaStatus")),
+    history: validId(history) ? history : undefined,
     thread: validId(thread) ? thread : undefined,
     week: field(form, "week") === "1" ? "1" : undefined,
   };
+  const undoAttendance = action === "undoAttendance";
   const statusChange = Object.hasOwn(statusActions, action);
   const creates = action === "book" || action === "block";
   const needsSlot = creates || action === "move";
   const cancels = action === "cancel" || action === "unblock";
   const editing = action === "move" && validId(appointment) ? appointment : undefined;
-  if (!location.clinic || !location.day || (!needsSlot && !cancels && !statusChange)
+  if (!location.clinic || !location.day || (!needsSlot && !cancels && !statusChange && !undoAttendance)
     || (!creates && (!validId(appointment) || !/^\d{1,10}$/.test(revision) || Number(revision) > 2147483647))
     || (needsSlot && (!location.professional || !Number.isFinite(Date.parse(start))))
     || (action === "book" && ((thread && !location.thread) || !patient))
@@ -60,7 +63,9 @@ export async function changeBooking(form: FormData) {
   }
 
   const client = await supabase();
-  const { error } = action === "block"
+  const { error } = undoAttendance
+    ? await client.rpc("agenda_undo_attendance", { p_clinic: clinic, p_appointment: appointment, p_revision: Number(revision) })
+    : action === "block"
     ? await client.rpc("agenda_block", {
       p_clinic: clinic, p_professional: professional, p_start: new Date(start).toISOString(), p_reason: patient,
     })
@@ -85,7 +90,7 @@ export async function changeBooking(form: FormData) {
     "23P01": "conflict", "40P01": "conflict", "42501": "forbidden",
     "22023": "invalid", P0001: "changed",
   };
-  const success = action === "block" ? "blocked" : action === "unblock" ? "unblocked" : statusChange ? action : action === "book" ? "booked" : action === "move" ? "moved" : "cancelled";
+  const success = undoAttendance ? "attendanceUndone" : action === "block" ? "blocked" : action === "unblock" ? "unblocked" : statusChange ? action : action === "book" ? "booked" : action === "move" ? "moved" : "cancelled";
   redirect(agendaUrl({
     ...location,
     block: error ? location.block : undefined,

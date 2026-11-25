@@ -24,6 +24,8 @@ A carga inicial inclui três profissionais e consultas fictícias no próximo di
 - A recepção pode confirmar a consulta antes do fim do horário, registrar comparecimento a partir do início e registrar falta a partir do fim. A situação aparece na agenda, com totais de atendidos e faltas. A consulta cancelada continua visível no dia e libera a vaga. A restrição de exclusão do PostgreSQL valida sobreposições inclusive durante gravações concorrentes.
 - A sessão do Supabase Auth identifica o usuário. As políticas de linha filtram as leituras por vínculo com a clínica. A operação de escrita verifica o vínculo novamente e executa em uma transação no banco.
 
+- Na agenda, **Ver histórico** mostra criação, remarcações e mudanças de situação registradas desde a aplicação da migração. Registros de comparecimento ou falta podem ser desfeitos, retornando à situação anterior e acrescentando a correção ao histórico.
+
 ## Testes
 
 Com a pilha local em execução:
