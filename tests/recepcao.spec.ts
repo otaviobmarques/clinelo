@@ -75,7 +75,7 @@ test("filtra a agenda por profissional sem mudar a consulta de vagas", async ({ 
   const lucas = `Paciente fictício Lucas ${marker}`;
 
   try {
-    const staff = unwrap(await stack.admin.from("professionals").select("id,name").eq("clinic_id", clinicA));
+    const staff = unwrap(await stack.admin.from("professionals").select("id,name").eq("clinic_id", clinicA)) ?? [];
     const marinaId = staff.find(({ name }) => name.includes("Marina"))!.id;
     const lucasId = staff.find(({ name }) => name.includes("Lucas"))!.id;
     unwrap(await stack.admin.from("appointments").insert([
