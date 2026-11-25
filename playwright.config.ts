@@ -1,4 +1,15 @@
+import { randomBytes } from "node:crypto";
+import { clinicB, localStack } from "./scripts/local-supabase.mjs";
 import { defineConfig } from "@playwright/test";
+
+const whatsappEnabled = process.env.CLINELO_TEST_WHATSAPP === "1";
+const whatsappEnv = whatsappEnabled ? {
+  WHATSAPP_APP_SECRET: process.env.CLINELO_TEST_META_SECRET ??= randomBytes(24).toString("hex"),
+  WHATSAPP_VERIFY_TOKEN: process.env.CLINELO_TEST_META_VERIFY ??= randomBytes(24).toString("hex"),
+  WHATSAPP_CONTACT_SECRET: randomBytes(24).toString("hex"),
+  WHATSAPP_CLINICS_JSON: JSON.stringify({ "10001": clinicB }),
+  SUPABASE_SERVICE_ROLE_KEY: localStack().serviceRoleKey,
+} : undefined;
 
 export default defineConfig({
   testDir: "./tests",
@@ -10,5 +21,6 @@ export default defineConfig({
     command: "npm run dev -- --hostname 127.0.0.1",
     url: "http://127.0.0.1:3000",
     timeout: 60_000,
+    env: whatsappEnv,
   },
 });

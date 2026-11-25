@@ -1,6 +1,6 @@
 # Clinelo
 
-Recepção digital para clínicas médicas e odontológicas da Domma Tecnologia. A Agenda do Produto reúne os atendimentos do dia, mostra as vagas por profissional e permite agendar, remarcar e cancelar consultas. A consulta de disponibilidade no Google Agenda é opcional. A caixa compartilhada organiza os atendimentos internos da equipe. WhatsApp Business oficial aparece como desconectado.
+Recepção digital para clínicas médicas e odontológicas da Domma Tecnologia. A Agenda do Produto reúne os atendimentos do dia, mostra as vagas por profissional e permite agendar, remarcar e cancelar consultas. A consulta de disponibilidade no Google Agenda é opcional. A caixa compartilhada organiza os atendimentos internos da equipe. O recebimento pelo WhatsApp Business oficial é opcional.
 
 ## Executar localmente
 
@@ -64,4 +64,15 @@ A chamada FreeBusy envia o ID do calendário e o intervalo de consulta. Ela reto
 
 Acesse **Caixa compartilhada** pelo painel da recepção. Crie um atendimento com um assunto e adicione notas internas. Os membros da mesma clínica podem consultar o histórico, encerrar e reabrir o atendimento. A caixa separa os atendimentos em aberto dos encerrados. A carga de desenvolvimento inclui um atendimento fictício por clínica. Em uma pilha local existente, aplique a nova migração com `npm run db -- migration up` para preservar os registros atuais.
 
-As operações verificam o vínculo no banco e serializam mudanças do mesmo atendimento. Se o atendimento já estiver encerrado, reabra antes de adicionar uma nota. Esta versão registra atendimentos manualmente. O WhatsApp Business oficial segue desconectado.
+As operações verificam o vínculo no banco e serializam mudanças do mesmo atendimento. Se o atendimento já estiver encerrado, reabra antes de adicionar uma nota. Além dos registros manuais, a caixa pode receber mensagens de texto do WhatsApp Business oficial quando configurado.
+
+## WhatsApp Business oficial
+
+A integração usa os webhooks da WhatsApp Cloud API. Quando habilitada, novas mensagens de texto entram no histórico da caixa da clínica vinculada. Uma mensagem nova reabre o atendimento do mesmo contato, e reentregas do mesmo evento são ignoradas. O histórico identifica a origem como WhatsApp. O remetente é agrupado por um identificador derivado do telefone, e seu número bruto fica fora do cadastro do atendimento. Este recorte cobre recebimento de texto. Anexos, envio de mensagens e eventos de status ficam fora do fluxo.
+
+1. Aplique a migração e disponibilize o endpoint `/api/whatsapp` via HTTPS no servidor do Clinelo.
+2. Configure no servidor `WHATSAPP_APP_SECRET` com o segredo do aplicativo Meta e `WHATSAPP_VERIFY_TOKEN` com um token aleatório para a verificação inicial do webhook. Configure `WHATSAPP_CONTACT_SECRET` com outro segredo aleatório, estável por ambiente. Sua troca muda o agrupamento de novos eventos por contato.
+3. Configure `WHATSAPP_CLINICS_JSON` com um objeto que mapeia cada **Phone Number ID** da Meta ao UUID da clínica. Exemplo fictício `{"10001":"10000000-0000-4000-8000-000000000002"}`. Configure também `SUPABASE_SERVICE_ROLE_KEY` com a chave administrativa do Supabase, exclusivamente no servidor. Mantenha os segredos fora do repositório e do prefixo `NEXT_PUBLIC_`.
+4. No painel da Meta, registre o callback HTTPS e o token de verificação. Assine o campo `messages` da conta do WhatsApp Business. O status **Configurado** na interface indica que há parâmetros no servidor para aquela clínica. Confirme a entrega com um evento de teste da Meta antes de usar o canal.
+
+Para testar localmente com mensagens e assinaturas fictícias, execute `CLINELO_TEST_WHATSAPP=1 npm run test:ui -- tests/whatsapp.spec.ts` com o Supabase local em execução e `.env.local` gerado pelo comando `demo`. O teste cobre verificação do callback, assinatura inválida, número sem vínculo, reentrega simultânea, reabertura e isolamento.
