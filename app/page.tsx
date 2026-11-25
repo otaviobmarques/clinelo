@@ -4,6 +4,7 @@ import {
   agendaUrl, localDay, messages, shiftDay, statusLabels, validDay, validId,
   type Booking, type Clinic, type Professional, type Slot,
 } from "../lib/agenda";
+import { whatsappConfigured } from "../lib/whatsapp";
 import { inboxUrl } from "../lib/inbox";
 import { googleAvailability, type GoogleAvailability } from "../lib/google-calendar";
 import { supabase, supabaseSettings } from "../lib/supabase";
@@ -24,14 +25,14 @@ const googleLabels = {
   checked: "Conectada",
 };
 
-function Integrations({ googleStatus }: { googleStatus: GoogleAvailability["status"] }) {
+function Integrations({ googleStatus, whatsapp }: { googleStatus: GoogleAvailability["status"]; whatsapp: boolean }) {
   return <section className="integrations" aria-labelledby="channels-title">
     <h2 id="channels-title">Canais da recepção</h2>
     <ul>
       <li>Agenda do Produto <span className="tag active">Ativa</span></li>
       <li>Google Agenda <span className={googleStatus === "checked" ? "tag active" : "tag"}>{googleLabels[googleStatus]}</span></li>
       <li>Caixa compartilhada <span className="tag active">Ativa</span></li>
-      <li>WhatsApp Business oficial <span className="tag">Desconectado</span></li>
+      <li>WhatsApp Business oficial <span className="tag">{whatsapp ? "Configurado" : "Desconectado"}</span></li>
     </ul>
   </section>;
 }
@@ -224,7 +225,7 @@ export default async function Page({ searchParams }: { searchParams: Promise<Par
               </> : <p className="empty">Nenhuma vaga disponível para esta data.</p>}
             </form>}
           </section>
-          <Integrations googleStatus={google.status} />
+          <Integrations googleStatus={google.status} whatsapp={whatsappConfigured(clinic.id)} />
         </aside>
       </div>
     </main>

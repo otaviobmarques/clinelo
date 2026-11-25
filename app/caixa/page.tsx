@@ -4,12 +4,13 @@ import { logout } from "../actions";
 import { changeInbox } from "./actions";
 import { agendaUrl, validId, type Clinic } from "../../lib/agenda";
 import { inboxLabels, inboxUrl, type InboxStatus } from "../../lib/inbox";
+import { whatsappConfigured } from "../../lib/whatsapp";
 import { supabase, supabaseSettings } from "../../lib/supabase";
 
 export const dynamic = "force-dynamic";
 
 type Thread = { id: string; subject: string; status: InboxStatus; updated_at: string };
-type Note = { id: string; body: string; author_id: string | null; created_at: string };
+type Note = { id: string; body: string; author_id: string | null; created_at: string; source: "internal" | "whatsapp" };
 type Params = Record<string, string | string[] | undefined>;
 
 const messages = {
@@ -69,7 +70,7 @@ export default async function Inbox({ searchParams }: { searchParams: Promise<Pa
   ]);
   const threads = (queue.data ?? []) as Thread[];
   const thread = details?.data as Thread | undefined;
-  const timeline = thread ? await client.from("inbox_notes").select("id,body,author_id,created_at")
+  const timeline = thread ? await client.from("inbox_notes").select("id,body,author_id,created_at,source")
     .eq("clinic_id", clinic.id).eq("thread_id", thread.id).order("created_at", { ascending: false })
     .order("id").limit(100) : null;
   const notes = (timeline?.data ?? []) as Note[];
@@ -132,12 +133,12 @@ export default async function Inbox({ searchParams }: { searchParams: Promise<Pa
               <label>Nota interna<textarea name="text" maxLength={2000} required rows={4} /></label>
               <button>Adicionar nota</button>
             </form>}
-            <h3>{notes.length === 100 ? "100 notas mais recentes" : "Histórico de notas"}</h3>
-            {!timeline?.error && !notes.length && <p className="empty">Nenhuma nota registrada.</p>}
+            <h3>{notes.length === 100 ? "100 registros mais recentes" : "Histórico"}</h3>
+            {!timeline?.error && !notes.length && <p className="empty">Nenhum registro neste atendimento.</p>}
             <ul className="inbox-list">
               {notes.map((note) => <li key={note.id}>
                 <p className="inbox-note">{note.body}</p>
-                <span className="subtle">{note.author_id === user.id ? "Você" : "Recepção"} ·{" "}
+                <span className="subtle">{note.source === "whatsapp" ? "WhatsApp" : note.author_id === user.id ? "Você" : "Recepção"} ·{" "}
                   <time dateTime={note.created_at}>{format.format(new Date(note.created_at))}</time></span>
               </li>)}
             </ul>
@@ -150,7 +151,8 @@ export default async function Inbox({ searchParams }: { searchParams: Promise<Pa
             <label>Assunto<input name="text" maxLength={120} required /></label>
             <button>Criar atendimento</button>
           </form>
-          <p className="subtle">As notas são visíveis para a equipe desta clínica. WhatsApp Business oficial desconectado.</p>
+          <p className="subtle">As notas são visíveis para a equipe desta clínica. {whatsappConfigured(clinic.id)
+            ? "WhatsApp Business oficial configurado para recebimento." : "WhatsApp Business oficial desconectado."}</p>
         </aside>
       </div>
     </main>

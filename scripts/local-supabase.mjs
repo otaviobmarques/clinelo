@@ -23,7 +23,7 @@ export function localStack() {
   const admin = createClient(url.href, status.SERVICE_ROLE_KEY, options);
 
   return {
-    url: url.origin, key, admin,
+    url: url.origin, key, admin, serviceRoleKey: status.SERVICE_ROLE_KEY,
     client: () => createClient(url.href, key, options),
     async user(clinic, label) {
       const email = `${label}.${randomUUID().slice(0, 8)}@clinelo.example`;

@@ -13,6 +13,7 @@ export function localStack(): {
   url: string;
   key: string;
   admin: SupabaseClient;
+  serviceRoleKey: string;
   client: () => SupabaseClient;
   user: (clinic: string, label: string) => Promise<LocalUser>;
   removeUser: (user: LocalUser) => Promise<void>;
