@@ -3,13 +3,13 @@ import { redirect } from "next/navigation";
 import { logout } from "../actions";
 import { changeInbox } from "./actions";
 import { agendaUrl, validId, type Clinic } from "../../lib/agenda";
-import { inboxLabels, inboxUrl, type InboxStatus } from "../../lib/inbox";
+import { channelLabels, inboxChannel, inboxLabels, inboxUrl, type InboxChannel, type InboxStatus } from "../../lib/inbox";
 import { whatsappConfigured } from "../../lib/whatsapp";
 import { supabase, supabaseSettings } from "../../lib/supabase";
 
 export const dynamic = "force-dynamic";
 
-type Thread = { id: string; subject: string; status: InboxStatus; updated_at: string };
+type Thread = { id: string; subject: string; status: InboxStatus; updated_at: string; channel: InboxChannel };
 type Note = { id: string; body: string; author_id: string | null; created_at: string; source: "internal" | "whatsapp" };
 type Params = Record<string, string | string[] | undefined>;
 
@@ -24,14 +24,15 @@ const messages = {
   error: "Não foi possível concluir a operação. Tente novamente.",
 };
 
-function Fields({ clinic, thread, operation, status }: {
-  clinic: string; thread?: string; operation: string; status: InboxStatus;
+function Fields({ clinic, thread, operation, status, channel }: {
+  clinic: string; thread?: string; operation: string; status: InboxStatus; channel?: InboxChannel;
 }) {
   return <>
     <input type="hidden" name="clinic" value={clinic} />
     <input type="hidden" name="thread" value={thread ?? ""} />
     <input type="hidden" name="operation" value={operation} />
     <input type="hidden" name="status" value={status} />
+    <input type="hidden" name="channel" value={channel ?? ""} />
   </>;
 }
 
@@ -44,9 +45,13 @@ export default async function Inbox({ searchParams }: { searchParams: Promise<Pa
   const params = await searchParams;
   const query = (key: string) => typeof params[key] === "string" ? params[key] : "";
   const status = query("status") === "closed" ? "closed" : "open";
+  const channel = inboxChannel(query("channel"));
   const requestedClinic = query("clinic");
   const requestedThread = query("thread");
   const page = /^\d{1,5}$/.test(query("page")) ? Math.max(1, Number(query("page"))) : 1;
+  const historyPage = /^\d{1,5}$/.test(query("historyPage")) ? Math.max(1, Number(query("historyPage"))) : 1;
+  const historySize = 100;
+  const historyStart = (historyPage - 1) * historySize;
   const pageSize = 25;
   const start = (page - 1) * pageSize;
   const clinicsResult = await client.from("clinics").select("id,name,timezone").order("name");
@@ -61,19 +66,21 @@ export default async function Inbox({ searchParams }: { searchParams: Promise<Pa
   </main>;
 
   const canSelectThread = (!requestedClinic || selected) && validId(requestedThread);
+  const queueQuery = client.from("inbox_threads").select("id,subject,status,updated_at,channel")
+    .eq("clinic_id", clinic.id).eq("status", status);
+  if (channel) queueQuery.eq("channel", channel);
   const [queue, details] = await Promise.all([
-    client.from("inbox_threads").select("id,subject,status,updated_at")
-      .eq("clinic_id", clinic.id).eq("status", status).order("updated_at", { ascending: false })
-      .order("id").range(start, start + pageSize),
-    canSelectThread ? client.from("inbox_threads").select("id,subject,status,updated_at")
+    queueQuery.order("updated_at", { ascending: false }).order("id").range(start, start + pageSize),
+    canSelectThread ? client.from("inbox_threads").select("id,subject,status,updated_at,channel")
       .eq("clinic_id", clinic.id).eq("id", requestedThread).maybeSingle() : null,
   ]);
   const threads = (queue.data ?? []) as Thread[];
   const thread = details?.data as Thread | undefined;
   const timeline = thread ? await client.from("inbox_notes").select("id,body,author_id,created_at,source")
     .eq("clinic_id", clinic.id).eq("thread_id", thread.id).order("created_at", { ascending: false })
-    .order("id").limit(100) : null;
+    .order("id", { ascending: false }).range(historyStart, historyStart + historySize) : null;
   const notes = (timeline?.data ?? []) as Note[];
+  const historyLink = (n: number) => inboxUrl(clinic.id, status, thread?.id, undefined, page, channel) + "&historyPage=" + n;
   const format = new Intl.DateTimeFormat("pt-BR", {
     timeZone: clinic.timezone, dateStyle: "short", timeStyle: "short",
   });
@@ -106,48 +113,60 @@ export default async function Inbox({ searchParams }: { searchParams: Promise<Pa
         <section className="card booking-card" aria-labelledby="queue-title">
           <h2 id="queue-title">Atendimentos</h2>
           <nav className="inbox-nav" aria-label="Filtrar atendimentos">
-            {(["open", "closed"] as const).map((filter) => <Link key={filter} href={inboxUrl(clinic.id, filter)}
+            {(["open", "closed"] as const).map((filter) => <Link key={filter} href={inboxUrl(clinic.id, filter, undefined, undefined, 1, channel)}
               className="secondary button" aria-current={filter === status ? "page" : undefined}>{inboxLabels[filter]}</Link>)}
+          </nav>
+          <nav className="inbox-nav" aria-label="Filtrar por origem">
+            {([undefined, "manual", "whatsapp"] as const).map((origin) => <Link
+              key={origin ?? "all"} href={inboxUrl(clinic.id, status, undefined, undefined, 1, origin)}
+              className="secondary button" aria-current={origin === channel ? "page" : undefined}>
+              {origin ? channelLabels[origin] : "Todas as origens"}
+            </Link>)}
           </nav>
           {!queue.error && threads.length === 0 && <p className="empty">Nenhum atendimento neste filtro.</p>}
           <ul className="inbox-list">
             {threads.slice(0, pageSize).map((item) => <li key={item.id}>
               <Link aria-current={thread?.id === item.id ? "page" : undefined}
-                href={inboxUrl(clinic.id, status, item.id, undefined, page)}>{item.subject}</Link>
+                href={inboxUrl(clinic.id, status, item.id, undefined, page, channel)}>{item.subject}</Link>
+              {" "}<span className="tag">{channelLabels[item.channel]}</span>
               <time className="subtle" dateTime={item.updated_at}>{format.format(new Date(item.updated_at))}</time>
             </li>)}
           </ul>
           {(page > 1 || threads.length > pageSize) && <nav className="inbox-nav" aria-label="Páginas de atendimentos">
-            {page > 1 && <Link href={inboxUrl(clinic.id, status, undefined, undefined, page - 1)}>Anterior</Link>}
-            {threads.length > pageSize && <Link href={inboxUrl(clinic.id, status, undefined, undefined, page + 1)}>Próxima</Link>}
+            {page > 1 && <Link href={inboxUrl(clinic.id, status, undefined, undefined, page - 1, channel)}>Anterior</Link>}
+            {threads.length > pageSize && <Link href={inboxUrl(clinic.id, status, undefined, undefined, page + 1, channel)}>Próxima</Link>}
           </nav>}
           {thread && <article className="inbox-thread">
             <h2>{thread.subject}</h2>
-            <p className="subtle">{thread.status === "open" ? "Em aberto" : "Encerrado"}</p>
+            <p className="subtle">{thread.status === "open" ? "Em aberto" : "Encerrado"} · {channelLabels[thread.channel]}</p>
             <form action={changeInbox} className="filters">
-              <Fields clinic={clinic.id} thread={thread.id} operation={thread.status === "open" ? "close" : "reopen"} status={thread.status} />
+              <Fields clinic={clinic.id} thread={thread.id} operation={thread.status === "open" ? "close" : "reopen"} status={thread.status} channel={channel} />
               <button className="secondary">{thread.status === "open" ? "Encerrar atendimento" : "Reabrir atendimento"}</button>
             </form>
             {thread.status === "open" && <form key={thread.id} action={changeInbox} className="filters">
-              <Fields clinic={clinic.id} thread={thread.id} operation="note" status={thread.status} />
+              <Fields clinic={clinic.id} thread={thread.id} operation="note" status={thread.status} channel={channel} />
               <label>Nota interna<textarea name="text" maxLength={2000} required rows={4} /></label>
               <button>Adicionar nota</button>
             </form>}
-            <h3>{notes.length === 100 ? "100 registros mais recentes" : "Histórico"}</h3>
-            {!timeline?.error && !notes.length && <p className="empty">Nenhum registro neste atendimento.</p>}
+            <h3>Histórico</h3>
+            {!timeline?.error && !notes.length && <p className="empty">{historyPage === 1 ? "Nenhum registro neste atendimento." : "Nenhum registro nesta página."}</p>}
             <ul className="inbox-list">
-              {notes.map((note) => <li key={note.id}>
+              {notes.slice(0, historySize).map((note) => <li key={note.id}>
                 <p className="inbox-note">{note.body}</p>
                 <span className="subtle">{note.source === "whatsapp" ? "WhatsApp" : note.author_id === user.id ? "Você" : "Recepção"} ·{" "}
                   <time dateTime={note.created_at}>{format.format(new Date(note.created_at))}</time></span>
               </li>)}
             </ul>
+            {!timeline?.error && (historyPage > 1 || notes.length > historySize) && <nav className="inbox-nav" aria-label="Páginas do histórico">
+              {historyPage > 1 && <Link href={historyLink(historyPage - 1)}>Mais recentes</Link>}
+              {notes.length > historySize && <Link href={historyLink(historyPage + 1)}>Mais antigos</Link>}
+            </nav>}
           </article>}
         </section>
         <aside className="card booking-card">
           <h2>Novo atendimento</h2>
           <form action={changeInbox} className="filters">
-            <Fields clinic={clinic.id} operation="create" status={status} />
+            <Fields clinic={clinic.id} operation="create" status={status} channel={channel} />
             <label>Assunto<input name="text" maxLength={120} required /></label>
             <button>Criar atendimento</button>
           </form>
