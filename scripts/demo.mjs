@@ -1,5 +1,5 @@
 import { writeFileSync } from "node:fs";
-import { clinicA, clinicB, localStack } from "./local-supabase.mjs";
+import { clinicA, clinicB, localStack, unwrap } from "./local-supabase.mjs";
 
 const stack = localStack();
 if (process.argv.includes("--env")) {
@@ -11,6 +11,8 @@ const users = [];
 try {
   users.push(await stack.user(clinicA, "horizonte"));
   users.push(await stack.user(clinicB, "sorriso"));
+  unwrap(await stack.admin.from("clinic_members").update({ can_manage_hours: true })
+    .eq("clinic_id", clinicA).eq("user_id", users[0].id));
 } catch (error) {
   await Promise.all(users.map((user) => stack.removeUser(user)));
   throw error;

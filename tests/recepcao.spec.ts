@@ -355,3 +355,57 @@ test("usa a grade do profissional com pausa, dia fechado e sábado", async ({ pa
     await stack.removeUser(user);
   }
 });
+
+test("administra horários pelo Clinelo e protege o acesso à grade", async ({ page }) => {
+  const stack = localStack();
+  const users: LocalUser[] = [];
+  const call = { p_clinic: clinicA, p_professional: professionalA, p_weekday: 1, p_action: "closed" };
+  const grade = () => stack.admin.from("professional_hours").select("opens_at,break_from,revision")
+    .eq("clinic_id", clinicA).eq("professional_id", professionalA).eq("weekday", 1).maybeSingle();
+
+  try {
+    users.push(await stack.user(clinicA, "admin-grade"));
+    users.push(await stack.user(clinicA, "recepcao-grade"));
+    unwrap(await stack.admin.from("clinic_members").update({ can_manage_hours: true })
+      .eq("clinic_id", clinicA).eq("user_id", users[0].id));
+    const admin = stack.client();
+    const member = stack.client();
+    for (const [client, user] of [[admin, users[0]], [member, users[1]]] as const) {
+      expect((await client.auth.signInWithPassword({ email: user.email, password: user.password })).error).toBeNull();
+    }
+    expect((await member.rpc("agenda_manage_hours", call)).error?.code).toBe("42501");
+    expect((await admin.rpc("agenda_manage_hours", { ...call, p_clinic: clinicB })).error?.code).toBe("42501");
+
+    await enter(page, users[0]);
+    await page.getByRole("link", { name: "Administrar grade" }).click();
+    await expect(page.getByRole("heading", { name: "Grade de atendimento" })).toBeVisible();
+    await page.getByRole("combobox", { name: "Profissional", exact: true }).selectOption(professionalA);
+    await page.getByRole("button", { name: "Abrir grade" }).click();
+    await expect(page.getByRole("heading", { name: /Semana de.*Marina/ })).toBeVisible();
+    await page.getByRole("combobox", { name: "Abertura" }).selectOption("10:00");
+    await page.getByRole("combobox", { name: "Fechamento" }).selectOption("16:00");
+    await page.getByRole("combobox", { name: "Início da pausa (opcional)" }).selectOption("12:00");
+    await page.getByRole("combobox", { name: "Fim da pausa (opcional)" }).selectOption("13:00");
+    await page.getByRole("button", { name: "Salvar horários" }).click();
+    await expect(page.getByText("10:00 – 16:00 · Pausa 12:00 – 13:00")).toBeVisible();
+    const before = unwrap(await grade());
+    expect(before).toMatchObject({ opens_at: "10:00:00", break_from: "12:00:00" });
+    await page.getByRole("button", { name: "Fechar o dia" }).click();
+    await expect(page.getByText("Fechado", { exact: true })).toBeVisible();
+    expect((await admin.rpc("agenda_manage_hours", { ...call, p_revision: before?.revision })).error?.code).toBe("P0001");
+    await page.getByRole("button", { name: "Restaurar padrão" }).click();
+    await expect(page.getByRole("region", { name: /Semana de.*Marina/ }).getByRole("listitem")
+      .filter({ hasText: "Segunda-feira" })).toContainText("Padrão · 08:00 – 18:00");
+    expect(unwrap(await grade())).toBeNull();
+
+    await page.getByRole("button", { name: "Sair", exact: true }).click();
+    await expect(page.getByRole("heading", { name: "Acesse sua recepção" })).toBeVisible();
+    await enter(page, users[1]);
+    await expect(page.getByRole("link", { name: "Administrar grade" })).toHaveCount(0);
+    await page.goto(`/grade?clinic=${clinicA}`);
+    await expect(page.getByRole("main").getByRole("alert")).toHaveText("Você não tem permissão para editar a grade desta clínica.");
+  } finally {
+    unwrap(await stack.admin.from("professional_hours").delete().eq("clinic_id", clinicA).eq("professional_id", professionalA).eq("weekday", 1));
+    for (const user of users) await stack.removeUser(user);
+  }
+});
