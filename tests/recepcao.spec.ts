@@ -409,3 +409,54 @@ test("administra horários pelo Clinelo e protege o acesso à grade", async ({ p
     for (const user of users) await stack.removeUser(user);
   }
 });
+
+test("abre ou fecha uma data específica sem mudar a grade semanal", async ({ page }) => {
+  const stack = localStack();
+  const user = await stack.user(clinicA, "excecao-grade");
+  const saturday = new Date();
+  saturday.setUTCDate(saturday.getUTCDate() + 119);
+  while (saturday.getUTCDay() !== 6) saturday.setUTCDate(saturday.getUTCDate() + 1);
+  const day = saturday.toISOString().slice(0, 10);
+  const following = new Date(+saturday + 7 * 86_400_000).toISOString().slice(0, 10);
+  const patient = "Paciente fictício " + randomUUID();
+
+  try {
+    unwrap(await stack.admin.from("clinic_members").update({ can_manage_hours: true })
+      .eq("clinic_id", clinicA).eq("user_id", user.id));
+    const member = stack.client();
+    expect((await member.auth.signInWithPassword({ email: user.email, password: user.password })).error).toBeNull();
+    const slots = (date: string) => member.rpc("agenda_slots", { p_clinic: clinicA, p_professional: professionalA, p_day: date });
+    expect(unwrap(await slots(day))).toEqual([]);
+
+    await enter(page, user);
+    await page.goto(`/grade?clinic=${clinicA}&professional=${professionalA}`);
+    await page.getByLabel("Data da exceção", { exact: true }).fill(day);
+    await page.getByRole("button", { name: "Abrir data" }).click();
+    await expect(page.getByRole("heading", { name: /^Exceção de/ })).toBeVisible();
+    await page.getByRole("combobox", { name: "Abertura" }).selectOption("09:00");
+    await page.getByRole("combobox", { name: "Fechamento" }).selectOption("11:00");
+    await page.getByRole("button", { name: "Salvar horários" }).click();
+    await expect(page.getByText("09:00 – 11:00", { exact: true })).toBeVisible();
+    expect(unwrap(await slots(day))).toHaveLength(4);
+    expect(unwrap(await slots(following))).toEqual([]);
+    unwrap(await member.rpc("agenda_change", {
+      p_clinic: clinicA, p_professional: professionalA, p_start: day + "T12:00:00Z", p_patient: patient, p_action: "book",
+    }));
+
+    const editor = page.url();
+    await page.getByRole("button", { name: "Fechar o dia" }).click();
+    await expect(page.getByText("Fechado", { exact: true })).toBeVisible();
+    expect(unwrap(await slots(day))).toEqual([]);
+    await page.goto(`/?day=${day}&professional=${professionalA}`);
+    await expect(page.getByText("Exceção de horário para esta data.")).toBeVisible();
+    await expect(page.getByRole("article").filter({ hasText: patient })).toBeVisible();
+    await page.goto(editor);
+    await page.getByRole("button", { name: "Remover exceção" }).click();
+    await expect(page.getByRole("button", { name: "Remover exceção" })).toHaveCount(0);
+    expect(unwrap(await slots(day))).toEqual([]);
+  } finally {
+    unwrap(await stack.admin.from("professional_date_hours").delete().eq("clinic_id", clinicA).eq("professional_id", professionalA).eq("day", day));
+    unwrap(await stack.admin.from("appointments").delete().eq("patient_name", patient));
+    await stack.removeUser(user);
+  }
+});
