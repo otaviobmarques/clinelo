@@ -129,3 +129,75 @@ test("recebe texto assinado, ignora reenvios e isola a caixa da clínica", async
     for (const user of users) await stack.removeUser(user);
   }
 });
+
+test("responde pela API simulada, respeita a janela e isola as respostas", async ({ request, page }) => {
+  const stack = localStack();
+  const id = randomUUID();
+  const phone = "10001";
+  const inbound = "Contato de teste " + id;
+  const member = await stack.user(clinicB, "whatsapp-resposta");
+  const outsider = await stack.user(clinicA, "whatsapp-resposta-outra");
+  let thread: string | undefined;
+
+  async function deliver(timestamp: number, suffix: string) {
+    const body = JSON.stringify({ object: "whatsapp_business_account", entry: [{ changes: [{
+      field: "messages", value: {
+        messaging_product: "whatsapp", metadata: { phone_number_id: phone },
+        messages: [{ type: "text", from: "10002", id: id + suffix, timestamp: String(timestamp), text: { body: inbound } }],
+      },
+    }] }] });
+    const signature = createHmac("sha256", process.env.CLINELO_TEST_META_SECRET!).update(body).digest("hex");
+    expect((await request.post("/api/whatsapp", {
+      data: body, headers: { "Content-Type": "application/json", "x-hub-signature-256": "sha256=" + signature },
+    })).status()).toBe(200);
+  }
+
+  try {
+    const now = Math.floor(Date.now() / 1000);
+    await deliver(now - 25 * 3600, "-expired");
+    thread = unwrap(await stack.admin.from("inbox_notes").select("thread_id").eq("body", inbound).single())!.thread_id;
+    await page.goto("/");
+    await page.getByLabel("E-mail").fill(member.email);
+    await page.getByLabel("Senha").fill(member.password);
+    await page.getByRole("button", { name: "Entrar" }).click();
+    await expect(page.getByText("WhatsApp Business oficial")).toContainText("Configurado");
+    const path = `/caixa?clinic=${clinicB}&thread=${thread}`;
+    await page.goto(path);
+    const send = page.getByRole("button", { name: "Enviar pelo WhatsApp" });
+    await expect(send).toHaveCount(0);
+
+    await deliver(now, "-recent");
+    await page.reload();
+    const message = page.getByLabel("Mensagem para o contato");
+    await message.fill("Resposta fictícia " + id);
+    await send.click();
+    await expect(page.getByRole("status")).toHaveText("Resposta aceita pela Meta.");
+
+    await message.fill("Resposta fictícia sem confirmação");
+    await send.click();
+    await expect(page.getByText("Envio sem confirmação", { exact: false }).first()).toBeVisible();
+    const stored = unwrap(await stack.admin.from("whatsapp_replies").select("body,status").eq("thread_id", thread));
+    expect(stored).toEqual(expect.arrayContaining([
+      { body: "Resposta fictícia " + id, status: "accepted" },
+      { body: "Resposta fictícia sem confirmação", status: "unknown" },
+    ]));
+    expect(stored).toHaveLength(2);
+
+    const external = stack.client();
+    expect((await external.auth.signInWithPassword({ email: outsider.email, password: outsider.password })).error).toBeNull();
+    expect(unwrap(await external.from("whatsapp_replies").select("id").eq("thread_id", thread))).toEqual([]);
+    expect(unwrap(await external.rpc("whatsapp_reply_available", { p_clinic: clinicB, p_thread: thread, p_phones: [phone] }))).toBe(false);
+    const reservation = { p_actor: member.id, p_clinic: clinicB, p_thread: thread, p_nonce: randomUUID(), p_body: "Reserva fictícia", p_phones: [phone] };
+    expect((await external.rpc("whatsapp_reserve_reply", reservation)).error?.code).toBe("42501");
+    expect((await stack.admin.rpc("whatsapp_reserve_reply", { ...reservation, p_actor: outsider.id })).error?.code).toBe("42501");
+    const attempts = await Promise.all([stack.admin.rpc("whatsapp_reserve_reply", reservation), stack.admin.rpc("whatsapp_reserve_reply", reservation)]);
+    expect(attempts.map((attempt) => unwrap(attempt)!.length).sort()).toEqual([0, 1]);
+
+    await page.getByRole("button", { name: "Encerrar atendimento" }).click();
+    await expect(send).toHaveCount(0);
+  } finally {
+    if (thread) unwrap(await stack.admin.from("inbox_threads").delete().eq("id", thread));
+    await stack.removeUser(member);
+    await stack.removeUser(outsider);
+  }
+});

@@ -1,6 +1,8 @@
 import { createClient } from "@supabase/supabase-js";
 import { deliveries, equalText, signedByMeta, whatsappSettings } from "../../../lib/whatsapp";
 
+import { protectRecipient, replySettings } from "../../../lib/whatsapp-reply";
+
 export const runtime = "nodejs";
 const maxBytes = 3 * 1024 * 1024;
 
@@ -60,10 +62,13 @@ export async function POST(request: Request) {
 
   try {
     const client = createClient(url, key, { auth: { persistSession: false, autoRefreshToken: false } });
+    const replies = replySettings(process.env);
     for (const message of messages) {
-      const { error } = await client.rpc("whatsapp_receive", {
+      const { error } = await client.rpc("whatsapp_receive_reply_context", {
         p_clinic: message.clinic, p_phone: message.phone, p_contact: message.contact,
         p_message: message.message, p_body: message.body,
+        p_cipher: replies && message.inboundAt ? protectRecipient(message.recipient, message, replies.secret) : null,
+        p_inbound_at: replies ? message.inboundAt : null,
       });
       if (error) return new Response(null, { status: 503 });
     }

@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { receptionUrl } from "../../lib/reception";
 import { QueueWait } from "./queue-wait";
 import Link from "next/link";
@@ -6,7 +7,9 @@ import { logout } from "../actions";
 import { changeInbox } from "./actions";
 import { agendaUrl, localDay, statusLabels, validId, type Booking, type Clinic } from "../../lib/agenda";
 import { channelLabels, inboxAssignment, inboxChannel, inboxLabels, inboxSearch, inboxUrl, type InboxAssignment, type InboxChannel, type InboxStatus } from "../../lib/inbox";
-import { whatsappConfigured } from "../../lib/whatsapp";
+import { whatsappPhones } from "../../lib/whatsapp";
+import { replySettings } from "../../lib/whatsapp-reply";
+import { replyOnWhatsapp } from "./whatsapp-actions";
 import { linkPatientThread } from "../pacientes/actions";
 import { patientsUrl } from "../../lib/patients";
 import { supabase, supabaseSettings } from "../../lib/supabase";
@@ -17,7 +20,16 @@ type Thread = { id: string; subject: string; status: InboxStatus; updated_at: st
 type Note = { id: string; body: string; author_id: string | null; created_at: string; source: "internal" | "whatsapp" };
 type Params = Record<string, string | string[] | undefined>;
 
+const replyLabels = {
+  sending: "Pendente de confirmação", accepted: "Aceita pela Meta",
+  rejected: "Envio recusado", unknown: "Envio sem confirmação",
+};
+
 const messages = {
+  replyAccepted: "Resposta aceita pela Meta.",
+  replyRejected: "O envio da resposta foi recusado.",
+  replyUnknown: "Envio sem confirmação. Confira o histórico antes de tentar novamente.",
+  replyUnavailable: "Resposta indisponível. Confira o atendimento e a janela de 24 horas.",
   patientLinked: "Paciente vinculado ao atendimento.",
   patientUnlinked: "Paciente desvinculado do atendimento.",
   claim: "Você assumiu o atendimento.",
@@ -97,7 +109,9 @@ export default async function Inbox({ searchParams }: { searchParams: Promise<Pa
   ]);
   const threads = (queue.data ?? []) as Thread[];
   const thread = details?.data as Thread | undefined;
-  const [timeline, linkedBookings, patientResult] = thread ? await Promise.all([
+  const phones = whatsappPhones(clinic.id);
+  const repliesConfigured = phones.length > 0 && Boolean(replySettings(process.env));
+  const [timeline, linkedBookings, patientResult, replies, availability] = thread ? await Promise.all([
     client.from("inbox_notes").select("id,body,author_id,created_at,source")
       .eq("clinic_id", clinic.id).eq("thread_id", thread.id).order("created_at", { ascending: false })
       .order("id", { ascending: false }).range(historyStart, historyStart + historySize),
@@ -105,7 +119,13 @@ export default async function Inbox({ searchParams }: { searchParams: Promise<Pa
       .eq("inbox_thread_id", thread.id).order("starts_at", { ascending: false }).order("id"),
     thread.patient_id ? client.from("patients").select("id,name,archived").eq("clinic_id", clinic.id)
       .eq("id", thread.patient_id).maybeSingle() : null,
-  ]) : [null, null, null];
+    thread.channel === "whatsapp" ? client.from("whatsapp_replies").select("id,body,status,created_at")
+      .eq("clinic_id", clinic.id).eq("thread_id", thread.id)
+      .order("created_at", { ascending: false }).order("id", { ascending: false })
+      .range(historyStart, historyStart + historySize) : null,
+    thread.channel === "whatsapp" && repliesConfigured
+      ? client.rpc("whatsapp_reply_available", { p_clinic: clinic.id, p_thread: thread.id, p_phones: phones }) : null,
+  ]) : [null, null, null, null, null];
   const linkedPatient = patientResult?.data;
   const notes = (timeline?.data ?? []) as Note[];
   const historyLink = (n: number) => inboxUrl({ ...filters, thread: thread?.id, page, historyPage: n });
@@ -113,7 +133,7 @@ export default async function Inbox({ searchParams }: { searchParams: Promise<Pa
     timeZone: clinic.timezone, dateStyle: "short", timeStyle: "short",
   });
   const notice = requestedClinic && !selected ? "access" : query("notice");
-  const success = ["create", "note", "close", "reopen", "claim", "release", "patientLinked", "patientUnlinked"].includes(notice);
+  const success = ["create", "note", "close", "reopen", "claim", "release", "patientLinked", "patientUnlinked", "replyAccepted"].includes(notice);
 
   return <>
     <header className="topbar"><div className="topbar-inner">
@@ -136,7 +156,7 @@ export default async function Inbox({ searchParams }: { searchParams: Promise<Pa
       {Object.hasOwn(messages, notice) && <p className={success ? "notice success" : "notice"} role={success ? "status" : "alert"}>
         {messages[notice as keyof typeof messages]}
       </p>}
-      {(queue.error || details?.error || timeline?.error || linkedBookings?.error || patientResult?.error) && <p className="notice" role="alert">
+      {(queue.error || details?.error || timeline?.error || linkedBookings?.error || patientResult?.error || replies?.error || availability?.error) && <p className="notice" role="alert">
         Parte da caixa está indisponível. Atualize a página para tentar novamente.
       </p>}
       {canSelectThread && !details?.error && !thread && <p className="notice" role="alert">Atendimento indisponível.</p>}
@@ -238,6 +258,23 @@ export default async function Inbox({ searchParams }: { searchParams: Promise<Pa
                 </Link>{" "}· {statusLabels[item.status as Booking["status"]]}
               </li>)}
             </ul>}
+            {thread.channel === "whatsapp" && <>
+              <h3>Respostas pelo WhatsApp</h3>
+              {availability?.data === true ? <form action={replyOnWhatsapp.bind(null, randomUUID())} className="filters">
+                <Fields clinic={clinic.id} thread={thread.id} operation="reply" status={status} channel={channel} assignment={assignment} search={search} />
+                <label>Mensagem para o contato<textarea name="reply" maxLength={4096} required /></label>
+                <button>Enviar pelo WhatsApp</button>
+              </form> : <p className="subtle">{repliesConfigured
+                ? "O envio exige um atendimento aberto e uma mensagem do contato nas últimas 24 horas."
+                : "Respostas pelo WhatsApp desconectadas."}</p>}
+              <ul className="inbox-list">
+                {replies?.data?.slice(0, historySize).map((reply) => <li key={reply.id}>
+                  <p className="inbox-note">{reply.body}</p>
+                  <span className="subtle">{replyLabels[reply.status as keyof typeof replyLabels]} ·{" "}
+                    <time dateTime={reply.created_at}>{format.format(new Date(reply.created_at))}</time></span>
+                </li>)}
+              </ul>
+            </>}
             <h3>Histórico</h3>
             {!timeline?.error && !notes.length && <p className="empty">{historyPage === 1 ? "Nenhum registro neste atendimento." : "Nenhum registro nesta página."}</p>}
             <ul className="inbox-list">
@@ -247,9 +284,9 @@ export default async function Inbox({ searchParams }: { searchParams: Promise<Pa
                   <time dateTime={note.created_at}>{format.format(new Date(note.created_at))}</time></span>
               </li>)}
             </ul>
-            {!timeline?.error && (historyPage > 1 || notes.length > historySize) && <nav className="inbox-nav" aria-label="Páginas do histórico">
+            {!timeline?.error && (historyPage > 1 || notes.length > historySize || (replies?.data?.length ?? 0) > historySize) && <nav className="inbox-nav" aria-label="Páginas do histórico">
               {historyPage > 1 && <Link href={historyLink(historyPage - 1)}>Mais recentes</Link>}
-              {notes.length > historySize && <Link href={historyLink(historyPage + 1)}>Mais antigos</Link>}
+              {(notes.length > historySize || (replies?.data?.length ?? 0) > historySize) && <Link href={historyLink(historyPage + 1)}>Mais antigos</Link>}
             </nav>}
           </article>}
         </section>
@@ -260,8 +297,9 @@ export default async function Inbox({ searchParams }: { searchParams: Promise<Pa
             <label>Assunto<input name="text" maxLength={120} required /></label>
             <button>Criar atendimento</button>
           </form>
-          <p className="subtle">As notas são visíveis para a equipe desta clínica. {whatsappConfigured(clinic.id)
-            ? "WhatsApp Business oficial configurado para recebimento." : "WhatsApp Business oficial desconectado."}</p>
+          <p className="subtle">As notas são visíveis para a equipe desta clínica. {repliesConfigured
+            ? "WhatsApp Business oficial configurado para receber e responder."
+            : phones.length ? "WhatsApp Business oficial configurado para recebimento." : "WhatsApp Business oficial desconectado."}</p>
         </aside>
       </div>
     </main>

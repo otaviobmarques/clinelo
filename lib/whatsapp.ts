@@ -38,7 +38,7 @@ export function signedByMeta(raw: Uint8Array, header: string | null, secret: str
 
 export function deliveries(payload: unknown, settings: Settings) {
   const envelope = object(payload);
-  const result: { clinic: string; phone: string; contact: string; message: string; body: string }[] = [];
+  const result: { clinic: string; phone: string; contact: string; message: string; body: string; recipient: string; inboundAt: string | null }[] = [];
   if (envelope.object !== "whatsapp_business_account") return result;
   for (const entry of list(envelope.entry)) {
     for (const change of list(object(entry).changes)) {
@@ -48,21 +48,27 @@ export function deliveries(payload: unknown, settings: Settings) {
       const clinic = typeof phone === "string" ? settings.clinics.get(phone) : undefined;
       if (field !== "messages" || typeof phone !== "string" || !clinic || event.messaging_product !== "whatsapp") continue;
       for (const incoming of list(event.messages)) {
-        const { from, id, text, type } = object(incoming);
+        const { from, id, text, type, timestamp } = object(incoming);
         const body = object(text).body;
         if (type !== "text" || typeof from !== "string" || !/^\d{1,32}$/.test(from)
           || typeof id !== "string" || !id.trim() || id.length > 512 || id.includes("\0")
           || typeof body !== "string" || !body.trim() || body.includes("\0") || Array.from(body.trim()).length > 4096) continue;
         const contact = createHmac("sha256", settings.contactSecret)
           .update(clinic + "/" + phone + "/" + from).digest("hex");
-        result.push({ clinic, phone, contact, message: id, body: body.trim() });
+        const seconds = typeof timestamp === "string" && /^\d{1,10}$/.test(timestamp) ? Number(timestamp) : 0;
+        const inboundAt = seconds > 0 && seconds * 1000 <= Date.now() ? new Date(seconds * 1000).toISOString() : null;
+        result.push({ clinic, phone, contact, message: id, body: body.trim(), recipient: from, inboundAt });
       }
     }
   }
   return result;
 }
 
-export function whatsappConfigured(clinic: string) {
+export function whatsappPhones(clinic: string) {
   const settings = whatsappSettings(process.env);
-  return settings !== null && Array.from(settings.clinics.values()).includes(clinic);
+  return [...(settings?.clinics ?? [])].filter(([, owner]) => owner === clinic).map(([phone]) => phone);
+}
+
+export function whatsappConfigured(clinic: string) {
+  return whatsappPhones(clinic).length > 0;
 }
