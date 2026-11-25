@@ -50,7 +50,7 @@ test("compartilha notas entre colegas e isola o atendimento de outras clínicas"
     await expect(colleaguePage.getByText("Responsável: " + users[0].email, { exact: true })).toBeVisible();
     await expect(colleaguePage.getByRole("button", { name: "Assumir atendimento" })).toHaveCount(0);
     const competing = stack.client();
-    unwrap(await competing.auth.signInWithPassword({ email: users[1].email, password: users[1].password }));
+    expect((await competing.auth.signInWithPassword({ email: users[1].email, password: users[1].password })).error).toBeNull();
     for (const release of [false, true]) {
       expect((await competing.rpc("inbox_assign_self", { p_clinic: clinicA, p_thread: thread, p_release: release })).error?.code).toBe("P0001");
     }
