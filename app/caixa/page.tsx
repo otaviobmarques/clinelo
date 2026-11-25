@@ -49,6 +49,9 @@ export default async function Inbox({ searchParams }: { searchParams: Promise<Pa
   const requestedClinic = query("clinic");
   const requestedThread = query("thread");
   const page = /^\d{1,5}$/.test(query("page")) ? Math.max(1, Number(query("page"))) : 1;
+  const historyPage = /^\d{1,5}$/.test(query("historyPage")) ? Math.max(1, Number(query("historyPage"))) : 1;
+  const historySize = 100;
+  const historyStart = (historyPage - 1) * historySize;
   const pageSize = 25;
   const start = (page - 1) * pageSize;
   const clinicsResult = await client.from("clinics").select("id,name,timezone").order("name");
@@ -75,8 +78,9 @@ export default async function Inbox({ searchParams }: { searchParams: Promise<Pa
   const thread = details?.data as Thread | undefined;
   const timeline = thread ? await client.from("inbox_notes").select("id,body,author_id,created_at,source")
     .eq("clinic_id", clinic.id).eq("thread_id", thread.id).order("created_at", { ascending: false })
-    .order("id").limit(100) : null;
+    .order("id", { ascending: false }).range(historyStart, historyStart + historySize) : null;
   const notes = (timeline?.data ?? []) as Note[];
+  const historyLink = (n: number) => inboxUrl(clinic.id, status, thread?.id, undefined, page, channel) + "&historyPage=" + n;
   const format = new Intl.DateTimeFormat("pt-BR", {
     timeZone: clinic.timezone, dateStyle: "short", timeStyle: "short",
   });
@@ -144,15 +148,19 @@ export default async function Inbox({ searchParams }: { searchParams: Promise<Pa
               <label>Nota interna<textarea name="text" maxLength={2000} required rows={4} /></label>
               <button>Adicionar nota</button>
             </form>}
-            <h3>{notes.length === 100 ? "100 registros mais recentes" : "Histórico"}</h3>
-            {!timeline?.error && !notes.length && <p className="empty">Nenhum registro neste atendimento.</p>}
+            <h3>Histórico</h3>
+            {!timeline?.error && !notes.length && <p className="empty">{historyPage === 1 ? "Nenhum registro neste atendimento." : "Nenhum registro nesta página."}</p>}
             <ul className="inbox-list">
-              {notes.map((note) => <li key={note.id}>
+              {notes.slice(0, historySize).map((note) => <li key={note.id}>
                 <p className="inbox-note">{note.body}</p>
                 <span className="subtle">{note.source === "whatsapp" ? "WhatsApp" : note.author_id === user.id ? "Você" : "Recepção"} ·{" "}
                   <time dateTime={note.created_at}>{format.format(new Date(note.created_at))}</time></span>
               </li>)}
             </ul>
+            {!timeline?.error && (historyPage > 1 || notes.length > historySize) && <nav className="inbox-nav" aria-label="Páginas do histórico">
+              {historyPage > 1 && <Link href={historyLink(historyPage - 1)}>Mais recentes</Link>}
+              {notes.length > historySize && <Link href={historyLink(historyPage + 1)}>Mais antigos</Link>}
+            </nav>}
           </article>}
         </section>
         <aside className="card booking-card">
