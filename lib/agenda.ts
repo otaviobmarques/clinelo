@@ -7,6 +7,7 @@ export type Booking = Slot & {
   patient_name: string;
   status: keyof typeof statusLabels;
   revision: number;
+  inbox_thread_id: string | null;
 };
 
 export const statusLabels = {
@@ -49,6 +50,7 @@ export const messages = {
   confirmed: "Consulta confirmada.",
   attended: "Comparecimento registrado.",
   absent: "Falta registrada.",
+  threadUnavailable: "O atendimento não está aberto para receber uma consulta.",
   conflict: "O horário acabou de ser ocupado. Escolha outra vaga.",
   changed: "O agendamento já foi alterado. Confira a agenda atualizada.",
   invalid: "Confira os dados e selecione um horário disponível.",
@@ -67,10 +69,10 @@ export function validDay(value: string) {
   return Number.isFinite(+date) && date.toISOString().slice(0, 10) === value;
 }
 
-export function localDay(timeZone: string) {
+export function localDay(timeZone: string, date = new Date()) {
   const parts = new Intl.DateTimeFormat("pt-BR", {
     timeZone, year: "numeric", month: "2-digit", day: "2-digit",
-  }).formatToParts();
+  }).formatToParts(date);
   const part = (name: string) => parts.find(({ type }) => type === name)?.value;
   return [part("year"), part("month"), part("day")].join("-");
 }
