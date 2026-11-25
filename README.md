@@ -19,12 +19,31 @@ A carga inicial inclui três profissionais e consultas fictícias no próximo di
 
 ## Regras da agenda
 
-- O dia segue o fuso da clínica. O campo **Profissional da agenda** filtra a lista e os totais do dia. **Situação da agenda** refina a lista sem alterar os totais. **Buscar paciente** encontra trechos do nome na data selecionada, ignorando maiúsculas e acentos. Use **Bloquear uma vaga** para reservar um intervalo de 30 minutos para um compromisso interno. Consulte os bloqueios ativos no filtro de situação e use **Liberar horário** para devolver a vaga à agenda. A escolha de profissional na consulta de vagas é independente. **Ver vagas da semana** compara sete dias a partir da data selecionada. Escolha um dia com vagas para abrir a consulta diária. Os totais da semana vêm da Agenda do Produto. Os avisos do Google aparecem na consulta do dia. Nesta primeira entrega, a grade tem horários de 30 minutos, das 8h às 18h, de segunda a sexta-feira.
+- O dia segue o fuso da clínica. O campo **Profissional da agenda** filtra a lista e os totais do dia. **Situação da agenda** refina a lista sem alterar os totais. **Buscar paciente** encontra trechos do nome na data selecionada, ignorando maiúsculas e acentos. Use **Bloquear uma vaga** para reservar um intervalo de 30 minutos para um compromisso interno. Consulte os bloqueios ativos no filtro de situação e use **Liberar horário** para devolver a vaga à agenda. A escolha de profissional na consulta de vagas é independente. **Ver vagas da semana** compara sete dias a partir da data selecionada. Escolha um dia com vagas para abrir a consulta diária. Os totais da semana vêm da Agenda do Produto. Os avisos do Google aparecem na consulta do dia. A grade padrão tem horários de 30 minutos, das 8h às 18h, de segunda a sexta-feira.
 - A remarcação pode trocar data, horário e profissional da mesma clínica. A revisão da consulta impede que uma operação anterior sobrescreva uma mudança mais recente.
 - A recepção pode confirmar a consulta antes do fim do horário, registrar comparecimento a partir do início e registrar falta a partir do fim. A situação aparece na agenda, com totais de atendidos e faltas. A consulta cancelada continua visível no dia e libera a vaga. A restrição de exclusão do PostgreSQL valida sobreposições inclusive durante gravações concorrentes.
 - A sessão do Supabase Auth identifica o usuário. As políticas de linha filtram as leituras por vínculo com a clínica. A operação de escrita verifica o vínculo novamente e executa em uma transação no banco.
 
 - Na agenda, **Ver histórico** mostra criação, remarcações e mudanças de situação registradas desde a aplicação da migração. Registros de comparecimento ou falta podem ser desfeitos, retornando à situação anterior e acrescentando a correção ao histórico.
+
+## Grade por profissional
+
+A administração configura exceções à grade padrão na tabela `professional_hours` do Supabase. Use o UUID da clínica e do profissional e `weekday` de 1 (segunda) até 7 (domingo). Uma linha define a abertura e o fechamento daquele dia da semana, com pausa opcional. Use múltiplos de 30 minutos e horários no fuso da clínica.
+
+- Para fechar um dia da semana, mantenha os quatro horários nulos.
+- Para retomar a grade padrão, remova a linha correspondente.
+- A nova grade vale para próximas reservas, remarcações e bloqueios. O histórico e as consultas já marcadas são preservados.
+
+Exemplo com a clínica e a profissional fictícias do ambiente local:
+
+```sql
+insert into public.professional_hours (clinic_id, professional_id, weekday, opens_at, closes_at, break_from, break_until)
+values ('10000000-0000-4000-8000-000000000001', '20000000-0000-4000-8000-000000000001',
+  1, '09:00', '17:00', '12:00', '13:00')
+on conflict (clinic_id, professional_id, weekday) do update set
+  opens_at = excluded.opens_at, closes_at = excluded.closes_at,
+  break_from = excluded.break_from, break_until = excluded.break_until;
+```
 
 ## Testes
 
