@@ -97,6 +97,32 @@ test("recebe texto assinado, ignora reenvios e isola a caixa da clínica", async
     await expect(whatsappFilter).toHaveAttribute("aria-current", "page");
     await expect(whatsappLink).toBeVisible();
     await expect(queue.getByRole("link", { name: manual })).toHaveCount(0);
+
+    // As duas mensagens recebidas ficam à frente destas 99 notas antigas.
+    // O horário idêntico exige que a consulta desempate os registros pelo ID.
+    const oldNotes = Array.from({ length: 99 }, (_, index) => ({
+      id: randomUUID(), clinic_id: clinicB, thread_id: threadId, author_id: users[0].id,
+      created_at: "2020-01-01T12:00:00Z", body: `Nota fictícia ${id} ${index}`,
+    }));
+    unwrap(await stack.admin.from("inbox_notes").insert(oldNotes));
+    await page.reload();
+    await whatsappLink.click();
+    const history = page.locator("article.inbox-thread .inbox-note");
+    const navigation = page.getByRole("navigation", { name: "Páginas do histórico" });
+    await expect(history).toHaveCount(100);
+    const firstPage = await history.allTextContents();
+    await navigation.getByRole("link", { name: "Mais antigos" }).click();
+    await expect(history).toHaveCount(1);
+    const location = new URL(page.url());
+    for (const [key, value] of Object.entries({ clinic: clinicB, thread: threadId, channel: "whatsapp", historyPage: "2" })) {
+      expect(location.searchParams.get(key)).toBe(value);
+    }
+    const secondPage = await history.allTextContents();
+    expect([...firstPage, ...secondPage].sort()).toEqual([first, next, ...oldNotes.map(note => note.body)].sort());
+    await expect(navigation.getByRole("link", { name: "Mais antigos" })).toHaveCount(0);
+    await navigation.getByRole("link", { name: "Mais recentes" }).click();
+    await expect(history).toHaveText(firstPage);
+    await expect(navigation.getByRole("link", { name: "Mais recentes" })).toHaveCount(0);
   } finally {
     if (threadId) unwrap(await stack.admin.from("inbox_threads").delete().eq("id", threadId));
     unwrap(await stack.admin.from("inbox_threads").delete().eq("subject", manual));
