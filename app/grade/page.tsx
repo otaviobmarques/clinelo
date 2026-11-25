@@ -2,7 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { logout } from "../actions";
 import { saveHours } from "./actions";
-import { agendaUrl, localDay, shiftDay, validDay, type Clinic, type Professional } from "../../lib/agenda";
+import { agendaUrl, localDay, shiftDay, validDay, type Clinic, type OutsideHoursBooking, type Professional } from "../../lib/agenda";
 import { gradeUrl, weekdays } from "../../lib/grade";
 import { supabase, supabaseSettings } from "../../lib/supabase";
 
@@ -91,7 +91,7 @@ export default async function Grade({ searchParams }: { searchParams: Promise<Pa
       .eq("clinic_id", clinic.id).eq("professional_id", professional.id).gte("day", today)
       .order("day").limit(15),
     client.rpc("agenda_outside_hours", { p_clinic: clinic.id, p_professional: professional.id,
-      p_from: day || today, p_through: impactEnd }).limit(26),
+      p_from: day || today, p_through: impactEnd }).limit(26).overrideTypes<OutsideHoursBooking[], { merge: false }>(),
   ]) : [null, null, null];
   const current = day ? dateResult?.data : weekly;
   const displayed = current ?? weekly;
