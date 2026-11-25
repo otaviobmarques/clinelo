@@ -33,13 +33,13 @@ test("resume a agenda de hoje e prioriza a fila da clínica", async ({ page }) =
         starts_at: at(60), ends_at: at(90), is_block: true },
       { id: ids[3], clinic_id: clinic, professional_id: professional, patient_name: "Consulta de ontem",
         starts_at: at(-1440), ends_at: at(-1410), status: "confirmed" },
-    ]));
+    ], { defaultToNull: false }));
     unwrap(await stack.admin.from("inbox_threads").insert([
       { id: older, clinic_id: clinic, subject: olderSubject },
       { id: recent, clinic_id: clinic, subject: recentSubject },
       { clinic_id: clinic, subject: "Atendimento atribuído", assignee_id: team[0].id, assignee_label: "Recepção fictícia" },
       { clinic_id: clinic, subject: "Atendimento encerrado", status: "closed" },
-    ]));
+    ], { defaultToNull: false }));
     unwrap(await stack.admin.from("inbox_threads").update({ queued_at: at(-65) }).eq("id", older));
     unwrap(await stack.admin.from("inbox_threads").update({ queued_at: at(-10) }).eq("id", recent));
 
