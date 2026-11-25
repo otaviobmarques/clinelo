@@ -40,7 +40,7 @@ function Integrations({ googleStatus, whatsapp }: { googleStatus: GoogleAvailabi
 
 function Notice({ code }: { code: string }) {
   if (!Object.hasOwn(messages, code)) return null;
-  const success = ["booked", "moved", "cancelled", "blocked", "unblocked"].includes(code) || Object.hasOwn(statusActions, code);
+  const success = ["booked", "moved", "cancelled", "blocked", "unblocked", "attendanceUndone"].includes(code) || Object.hasOwn(statusActions, code);
   return <p className={success ? "notice success" : "notice"} role={success ? "status" : "alert"}>
     {messages[code as keyof typeof messages]}
   </p>;
@@ -87,13 +87,16 @@ export default async function Page({ searchParams }: { searchParams: Promise<Par
   const day = validDay(query("day")) ? query("day") : today;
   const week = query("week") === "1" && validDay(shiftDay(day, 6));
   const edit = validId(query("edit")) ? query("edit") : "";
+  const history = validId(query("history")) && (!requestedClinic || selectedClinic) ? query("history") : undefined;
   const requestedThread = !edit ? query("thread") : "";
-  const [staff, target, originResult] = await Promise.all([
+  const [staff, target, originResult, historyBooking] = await Promise.all([
     client.from("professionals").select("id,name").eq("clinic_id", clinic.id).order("name"),
     edit ? client.from("appointments").select("*").eq("clinic_id", clinic.id).eq("id", edit).maybeSingle() : null,
     validId(requestedThread) && (!requestedClinic || selectedClinic)
       ? client.from("inbox_threads").select("id,subject,status").eq("clinic_id", clinic.id)
         .eq("id", requestedThread).maybeSingle() : null,
+    history ? client.from("appointments").select("*").eq("clinic_id", clinic.id)
+      .eq("id", history).eq("is_block", false).maybeSingle() : null,
   ]);
   const origin = originResult?.data;
   const validOrigin = !requestedThread || origin?.status === "open";
@@ -105,7 +108,7 @@ export default async function Page({ searchParams }: { searchParams: Promise<Par
   const moving = candidate && !candidate.is_block && ["scheduled", "confirmed"].includes(candidate.status) ? candidate : undefined;
   const professional = [query("professional"), moving?.professional_id]
     .map((id) => professionals.find((person) => person.id === id)).find(Boolean) ?? professionals[0];
-  const [agenda, slotResult, weekResult] = await Promise.all([
+  const [agenda, slotResult, weekResult, historyResult] = await Promise.all([
     dayQuery,
     professional ? client.rpc("agenda_slots", {
       p_clinic: clinic.id, p_professional: professional.id, p_day: day,
@@ -113,6 +116,9 @@ export default async function Page({ searchParams }: { searchParams: Promise<Par
     week && professional ? client.rpc("agenda_week", {
       p_clinic: clinic.id, p_professional: professional.id, p_from: day,
     }) : null,
+    historyBooking?.data ? client.from("appointment_events")
+      .select("id,revision,occurred_at,actor_id,previous_status,status,previous_start,starts_at,previous_professional,professional_id")
+      .eq("clinic_id", clinic.id).eq("appointment_id", historyBooking.data.id).order("id", { ascending: false }).limit(50) : null,
   ]);
   const bookings = (agenda.data ?? []) as Booking[];
   const agendaStatus = agendaStatusFilter(query("agendaStatus"));
@@ -133,7 +139,7 @@ export default async function Page({ searchParams }: { searchParams: Promise<Par
       account: process.env.GOOGLE_CALENDAR_SERVICE_ACCOUNT_JSON,
     },
   ) : { status: "disconnected" as const };
-  const scope = { clinic: clinic.id, day, professional: professional?.id, agendaProfessional: agendaProfessional?.id, agendaStatus, patientQuery, block: blocking ? "1" : undefined, week: week ? "1" : undefined, thread: validId(requestedThread) ? requestedThread : undefined, edit: moving?.id };
+  const scope = { clinic: clinic.id, day, professional: professional?.id, agendaProfessional: agendaProfessional?.id, agendaStatus, patientQuery, history, block: blocking ? "1" : undefined, week: week ? "1" : undefined, thread: validId(requestedThread) ? requestedThread : undefined, edit: moving?.id };
   const dayLabel = new Intl.DateTimeFormat("pt-BR", {
     dateStyle: "full", timeZone: "UTC",
   }).format(new Date(day + "T12:00:00Z"));
@@ -151,6 +157,14 @@ export default async function Page({ searchParams }: { searchParams: Promise<Par
   };
 
   const now = Date.now();
+  const audited = historyBooking?.data as Booking | undefined;
+  const events = historyResult?.data ?? [];
+  const latest = events[0];
+  const undoable = audited && latest && ["attended", "absent"].includes(audited.status)
+    && latest.revision === audited.revision && latest.status === audited.status
+    && ["scheduled", "confirmed"].includes(latest.previous_status ?? "");
+  const historyDate = new Intl.DateTimeFormat("pt-BR", { timeZone: clinic.timezone, dateStyle: "short", timeStyle: "short" });
+  const professionalName = (id: string) => professionals.find((person) => person.id === id)?.name ?? "Profissional";
   const visitFields = (booking: Booking) => <>
     <input type="hidden" name="clinic" value={clinic.id} />
     <input type="hidden" name="day" value={day} />
@@ -160,6 +174,7 @@ export default async function Page({ searchParams }: { searchParams: Promise<Par
     {patientQuery && <input type="hidden" name="patientQuery" value={patientQuery} />}
     {week && <input type="hidden" name="week" value="1" />}
     {scope.thread && <input type="hidden" name="thread" value={scope.thread} />}
+    {history && <input type="hidden" name="history" value={history} />}
     <input type="hidden" name="appointment" value={booking.id} />
     <input type="hidden" name="revision" value={booking.revision} />
   </>;
@@ -228,6 +243,7 @@ export default async function Page({ searchParams }: { searchParams: Promise<Par
               <div className="visit-details">
                 <strong>{booking.patient_name}</strong>
                 <span>{professionals.find(({ id }) => id === booking.professional_id)?.name ?? "Profissional"}</span>
+                {!booking.is_block && <Link href={agendaUrl({ ...scope, history: booking.id }) + "#historico-consulta"}>Ver histórico</Link>}
                 {booking.inbox_thread_id && <Link href={inboxUrl({ clinic: clinic.id, thread: booking.inbox_thread_id })}>Ver atendimento</Link>}
               </div>
               <span className={booking.status === "cancelled" ? "tag" : "tag active"}>{booking.is_block ? bookingIsOpen(booking) ? "Bloqueado" : "Liberado" : statusLabels[booking.status]}</span>
@@ -256,6 +272,34 @@ export default async function Page({ searchParams }: { searchParams: Promise<Par
               </div>}
             </article>)}
           </div>
+          {history && <section id="historico-consulta" className="booking-card" aria-labelledby="history-title">
+            <h2 id="history-title">Histórico da consulta</h2>
+            <Link href={agendaUrl({ ...scope, history: undefined })}>Fechar histórico</Link>
+            {audited && <p className="subtle">{audited.patient_name}</p>}
+            {(historyBooking?.error || historyResult?.error) ? <p role="alert">Não foi possível carregar o histórico.</p>
+              : !audited ? <p>Consulta indisponível.</p>
+              : !events.length && <p className="empty">Nenhuma alteração registrada desde a ativação do histórico.</p>}
+            {events.length === 50 && <p className="subtle">50 alterações mais recentes.</p>}
+            {Boolean(events.length) && <ul className="inbox-list">
+              {events.map((event) => <li key={event.id}>
+                <p>{event.previous_status === null ? "Agendamento criado" : event.previous_status !== event.status
+                  ? statusLabels[event.previous_status as Booking["status"]] + " → " + statusLabels[event.status as Booking["status"]]
+                  : "Agendamento remarcado"}</p>
+                {event.previous_start && (event.previous_start !== event.starts_at || event.previous_professional !== event.professional_id) &&
+                  <p className="subtle">{historyDate.format(new Date(event.previous_start))} · {professionalName(event.previous_professional)}
+                    {" → "}{historyDate.format(new Date(event.starts_at))} · {professionalName(event.professional_id)}</p>}
+                <span className="subtle">{historyDate.format(new Date(event.occurred_at))} · {event.actor_id === user.id ? "Você" : event.actor_id ? "Recepção" : "Sistema"}</span>
+              </li>)}
+            </ul>}
+            {undoable && <details>
+              <summary>Corrigir comparecimento ou falta</summary>
+              <form action={changeBooking} className="filters">
+                {visitFields(audited)}
+                <input type="hidden" name="operation" value="undoAttendance" />
+                <button className="secondary">Desfazer registro de presença</button>
+              </form>
+            </details>}
+          </section>}
         </section>
         <aside>
           <section className="card booking-card" id="vagas" aria-labelledby="booking-title">
