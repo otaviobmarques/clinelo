@@ -30,7 +30,7 @@ A carga inicial inclui três profissionais e consultas fictícias no próximo di
 
 Use **Administrar grade** no Clinelo para salvar horários e pausas, fechar um dia ou restaurar o padrão. O atalho aparece para membros autorizados na clínica. A administração habilita o acesso definindo `can_manage_hours = true` no vínculo correspondente em `clinic_members`.
 
-Em **Exceções por data**, selecione uma data para fechar o dia ou ajustar os horários e a pausa. Uma exceção prevalece sobre a grade semanal e pode ser removida para restaurar a regra da semana. Consultas existentes continuam visíveis.
+Em **Exceções por data**, selecione uma data para fechar o dia ou ajustar os horários e a pausa. A agenda consulta primeiro a exceção da data, depois a grade semanal do profissional e, por fim, a grade padrão da clínica. Remover a exceção volta a aplicar a regra seguinte. Consultas existentes continuam visíveis. Em uma pilha local existente, aplique a migração com `npm run db -- migration up`.
 
 A grade também pode ser administrada na tabela `professional_hours` do Supabase. Use o UUID da clínica e do profissional e `weekday` de 1 (segunda) até 7 (domingo). Uma linha define a abertura e o fechamento daquele dia da semana, com pausa opcional. Use múltiplos de 30 minutos e horários no fuso da clínica.
 
