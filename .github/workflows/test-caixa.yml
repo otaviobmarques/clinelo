@@ -5,6 +5,7 @@ on:
       - 'app/caixa/**'
       - 'lib/inbox.ts'
       - 'tests/whatsapp.spec.ts'
+      - 'tests/caixa.spec.ts'
       - 'supabase/migrations/**'
       - '.github/workflows/test-caixa.yml'
 permissions:
@@ -26,6 +27,7 @@ jobs:
       - run: npm run db -- start
       - run: npm run demo -- --env > /dev/null
       - run: npx playwright install --with-deps chromium
-      - run: npm run test:ui -- tests/whatsapp.spec.ts
+      - run: npm run typecheck
+      - run: npm run test:ui -- tests/whatsapp.spec.ts tests/caixa.spec.ts --workers=1
         env:
           CLINELO_TEST_WHATSAPP: '1'

@@ -9,11 +9,13 @@ import { supabase, supabaseSettings } from "../../lib/supabase";
 
 export const dynamic = "force-dynamic";
 
-type Thread = { id: string; subject: string; status: InboxStatus; updated_at: string; channel: InboxChannel };
+type Thread = { id: string; subject: string; status: InboxStatus; updated_at: string; channel: InboxChannel; assignee_id: string | null; assignee_label: string | null };
 type Note = { id: string; body: string; author_id: string | null; created_at: string; source: "internal" | "whatsapp" };
 type Params = Record<string, string | string[] | undefined>;
 
 const messages = {
+  claim: "Você assumiu o atendimento.",
+  release: "Atendimento devolvido à fila.",
   create: "Atendimento criado.",
   note: "Nota adicionada.",
   close: "Atendimento encerrado.",
@@ -66,12 +68,12 @@ export default async function Inbox({ searchParams }: { searchParams: Promise<Pa
   </main>;
 
   const canSelectThread = (!requestedClinic || selected) && validId(requestedThread);
-  const queueQuery = client.from("inbox_threads").select("id,subject,status,updated_at,channel")
+  const queueQuery = client.from("inbox_threads").select("id,subject,status,updated_at,channel,assignee_id,assignee_label")
     .eq("clinic_id", clinic.id).eq("status", status);
   if (channel) queueQuery.eq("channel", channel);
   const [queue, details] = await Promise.all([
     queueQuery.order("updated_at", { ascending: false }).order("id").range(start, start + pageSize),
-    canSelectThread ? client.from("inbox_threads").select("id,subject,status,updated_at,channel")
+    canSelectThread ? client.from("inbox_threads").select("id,subject,status,updated_at,channel,assignee_id,assignee_label")
       .eq("clinic_id", clinic.id).eq("id", requestedThread).maybeSingle() : null,
   ]);
   const threads = (queue.data ?? []) as Thread[];
@@ -85,7 +87,7 @@ export default async function Inbox({ searchParams }: { searchParams: Promise<Pa
     timeZone: clinic.timezone, dateStyle: "short", timeStyle: "short",
   });
   const notice = requestedClinic && !selected ? "access" : query("notice");
-  const success = ["create", "note", "close", "reopen"].includes(notice);
+  const success = ["create", "note", "close", "reopen", "claim", "release"].includes(notice);
 
   return <>
     <header className="topbar"><div className="topbar-inner">
@@ -129,6 +131,7 @@ export default async function Inbox({ searchParams }: { searchParams: Promise<Pa
               <Link aria-current={thread?.id === item.id ? "page" : undefined}
                 href={inboxUrl(clinic.id, status, item.id, undefined, page, channel)}>{item.subject}</Link>
               {" "}<span className="tag">{channelLabels[item.channel]}</span>
+              {item.status === "open" && <span className="subtle"> · {item.assignee_label ?? "Sem responsável"} </span>}
               <time className="subtle" dateTime={item.updated_at}>{format.format(new Date(item.updated_at))}</time>
             </li>)}
           </ul>
@@ -139,6 +142,13 @@ export default async function Inbox({ searchParams }: { searchParams: Promise<Pa
           {thread && <article className="inbox-thread">
             <h2>{thread.subject}</h2>
             <p className="subtle">{thread.status === "open" ? "Em aberto" : "Encerrado"} · {channelLabels[thread.channel]}</p>
+            {thread.status === "open" && <div>
+              <p>Responsável: {thread.assignee_label ?? "Sem responsável"}</p>
+              {(!thread.assignee_id || thread.assignee_id === user.id) && <form action={changeInbox}>
+                <Fields clinic={clinic.id} thread={thread.id} status={status} channel={channel} operation={thread.assignee_id ? "release" : "claim"} />
+                <button className="secondary">{thread.assignee_id ? "Devolver à fila" : "Assumir atendimento"}</button>
+              </form>}
+            </div>}
             <form action={changeInbox} className="filters">
               <Fields clinic={clinic.id} thread={thread.id} operation={thread.status === "open" ? "close" : "reopen"} status={thread.status} channel={channel} />
               <button className="secondary">{thread.status === "open" ? "Encerrar atendimento" : "Reabrir atendimento"}</button>

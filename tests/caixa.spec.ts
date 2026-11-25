@@ -27,6 +27,12 @@ test("compartilha notas entre colegas e isola o atendimento de outras clínicas"
     await page.getByLabel("Assunto").fill(subject);
     await page.getByRole("button", { name: "Criar atendimento" }).click();
     await expect(page.getByRole("status")).toHaveText("Atendimento criado.");
+    await page.getByRole("button", { name: "Assumir atendimento" }).click();
+    await expect(page.getByRole("status")).toHaveText("Você assumiu o atendimento.");
+    await page.getByRole("button", { name: "Devolver à fila" }).click();
+    await expect(page.getByRole("status")).toHaveText("Atendimento devolvido à fila.");
+    await page.getByRole("button", { name: "Assumir atendimento" }).click();
+    await expect(page.getByRole("status")).toHaveText("Você assumiu o atendimento.");
     await page.getByLabel("Nota interna").fill(note);
     await page.getByRole("button", { name: "Adicionar nota" }).click();
     await expect(page.getByRole("status")).toHaveText("Nota adicionada.");
@@ -41,6 +47,13 @@ test("compartilha notas entre colegas e isola o atendimento de outras clínicas"
     await colleaguePage.getByRole("link", { name: "Caixa compartilhada" }).click();
     await colleaguePage.getByRole("link", { name: subject, exact: true }).click();
     await expect(colleaguePage.getByText(note, { exact: true })).toBeVisible();
+    await expect(colleaguePage.getByText("Responsável: " + users[0].email, { exact: true })).toBeVisible();
+    await expect(colleaguePage.getByRole("button", { name: "Assumir atendimento" })).toHaveCount(0);
+    const competing = stack.client();
+    unwrap(await competing.auth.signInWithPassword({ email: users[1].email, password: users[1].password }));
+    for (const release of [false, true]) {
+      expect((await competing.rpc("inbox_assign_self", { p_clinic: clinicA, p_thread: thread, p_release: release })).error?.code).toBe("P0001");
+    }
     await colleaguePage.getByRole("button", { name: "Encerrar atendimento" }).click();
     await expect(colleaguePage.getByRole("status")).toHaveText("Atendimento encerrado.");
     await expect(colleaguePage.getByLabel("Nota interna")).toHaveCount(0);
@@ -69,6 +82,7 @@ test("compartilha notas entre colegas e isola o atendimento de outras clínicas"
 
     await colleaguePage.getByRole("button", { name: "Reabrir atendimento" }).click();
     await expect(colleaguePage.getByRole("status")).toHaveText("Atendimento reaberto.");
+    await expect(colleaguePage.getByRole("button", { name: "Assumir atendimento" })).toBeVisible();
     await expect(colleaguePage.getByLabel("Nota interna")).toBeVisible();
   } finally {
     for (const context of contexts) await context.close();
