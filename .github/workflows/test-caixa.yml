@@ -8,6 +8,9 @@ on:
       - 'app/grade/**'
       - 'app/pacientes/**'
       - 'app/painel/**'
+      - 'app/espera/**'
+      - 'lib/waiting.ts'
+      - 'tests/espera.spec.ts'
       - 'lib/reception.ts'
       - 'tests/painel.spec.ts'
       - 'lib/patients.ts'
@@ -39,6 +42,6 @@ jobs:
       - run: npm run demo -- --env > /dev/null
       - run: npx playwright install --with-deps chromium
       - run: npm run typecheck
-      - run: npm run test:ui -- tests/whatsapp.spec.ts tests/caixa.spec.ts tests/recepcao.spec.ts tests/pacientes.spec.ts tests/painel.spec.ts --workers=1
+      - run: npm run test:ui -- tests/whatsapp.spec.ts tests/caixa.spec.ts tests/recepcao.spec.ts tests/pacientes.spec.ts tests/painel.spec.ts tests/espera.spec.ts --workers=1
         env:
           CLINELO_TEST_WHATSAPP: '1'

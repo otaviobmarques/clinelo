@@ -90,6 +90,10 @@ A chamada FreeBusy envia o ID do calendário e o intervalo de consulta. Ela reto
 
 Use **Painel** na agenda ou na caixa para consultar os totais de hoje e os próximos horários da clínica. A seção de atendimento mostra a fila atual e os cinco atendimentos há mais tempo sem responsável, quando o horário de entrada está registrado. Os números e itens abrem os filtros ou registros correspondentes.
 
+## Lista de espera
+
+Na ficha de um paciente ativo, use **Adicionar à lista de espera**. Informe o profissional e um intervalo de até 30 dias. Abra a lista pelo painel, selecione a preferência e consulte as vagas da data escolhida. A reserva vincula a consulta à ficha e conclui a solicitação na mesma transação. As solicitações agendadas, retiradas ou expiradas ficam no histórico. A recepção opera o fluxo manualmente.
+
 ## Cadastro de pacientes
 
 Acesse **Pacientes** pela agenda. A ficha tem nome e contatos opcionais, busca por nome, telefone ou e-mail e histórico de consultas vinculadas. Pode ser editada, arquivada e reativada pela equipe da clínica. Um cadastro arquivado preserva seu histórico e fica indisponível para novos agendamentos.
