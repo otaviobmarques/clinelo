@@ -161,6 +161,21 @@ test("confirma e registra comparecimento ou falta conforme o horário", async ({
       await expect(page.getByRole("combobox", { name: "Profissional da agenda" })).toHaveValue(professionalA);
     }
     await expect(page.getByText("1 atendido · 1 falta")).toBeVisible();
+    const statusFilter = page.getByRole("combobox", { name: "Situação da agenda" });
+    const apply = page.getByRole("button", { name: "Filtrar agenda" });
+    await statusFilter.selectOption("attended");
+    await apply.click();
+    await expect(page.getByRole("article").filter({ hasText: name(cases[2].id) })).toHaveCount(0);
+    await expect(page.getByRole("article").filter({ hasText: name(cases[1].id) })).toBeVisible();
+    await expect(page.getByText("1 atendido · 1 falta")).toBeVisible();
+    await page.getByRole("button", { name: "Consultar vagas" }).click();
+    await expect(page).toHaveURL(/[?&]agendaStatus=attended(?:&|$)/);
+    await statusFilter.selectOption("open");
+    await apply.click();
+    await expect(page.getByText("Nenhum agendamento corresponde aos filtros.")).toBeVisible();
+    await statusFilter.selectOption("");
+    await apply.click();
+    await expect(page.getByRole("article").filter({ hasText: name(cases[2].id) })).toBeVisible();
     expect((await member.rpc("agenda_change", { p_clinic: clinicA, p_appointment: cases[0].id,
       p_revision: 0, p_action: "cancel" })).error?.code).toBe("P0001");
     expect((await member.rpc("agenda_set_status", { ...payload, p_appointment: cases[1].id, p_revision: 1,

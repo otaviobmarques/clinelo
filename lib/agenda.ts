@@ -17,6 +17,25 @@ export const statusLabels = {
   absent: "Faltou",
 };
 
+export const agendaStatusFilters = {
+  open: "Em aberto",
+  scheduled: "Agendados",
+  confirmed: "Confirmados",
+  attended: "Atendidos",
+  absent: "Faltas",
+  cancelled: "Cancelados",
+} as const;
+
+export type AgendaStatusFilter = keyof typeof agendaStatusFilters;
+
+export function agendaStatusFilter(value: string): AgendaStatusFilter | undefined {
+  return Object.hasOwn(agendaStatusFilters, value) ? value as AgendaStatusFilter : undefined;
+}
+
+export function bookingIsOpen({ status }: Booking) {
+  return status === "scheduled" || status === "confirmed";
+}
+
 export const statusActions = {
   confirmed: "Confirmar consulta",
   attended: "Registrar comparecimento",

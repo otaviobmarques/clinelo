@@ -2,7 +2,7 @@
 
 import { redirect } from "next/navigation";
 import { supabase } from "../lib/supabase";
-import { agendaUrl, statusActions, validDay, validId } from "../lib/agenda";
+import { agendaStatusFilter, agendaUrl, statusActions, validDay, validId } from "../lib/agenda";
 
 function field(form: FormData, name: string) {
   const value = form.get(name);
@@ -39,6 +39,7 @@ export async function changeBooking(form: FormData) {
     day: validDay(day) ? day : undefined,
     professional: validId(professional) ? professional : undefined,
     agendaProfessional: validId(agendaProfessional) ? agendaProfessional : undefined,
+    agendaStatus: agendaStatusFilter(field(form, "agendaStatus")),
     week: field(form, "week") === "1" ? "1" : undefined,
   };
   const statusChange = Object.hasOwn(statusActions, action);
