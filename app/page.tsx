@@ -108,7 +108,8 @@ export default async function Page({ searchParams }: { searchParams: Promise<Par
   const moving = candidate && !candidate.is_block && ["scheduled", "confirmed"].includes(candidate.status) ? candidate : undefined;
   const professional = [query("professional"), moving?.professional_id]
     .map((id) => professionals.find((person) => person.id === id)).find(Boolean) ?? professionals[0];
-  const [agenda, slotResult, weekResult, historyResult] = await Promise.all([
+  const weekday = new Date(day + "T12:00:00Z").getUTCDay() || 7;
+  const [agenda, slotResult, weekResult, historyResult, hoursResult] = await Promise.all([
     dayQuery,
     professional ? client.rpc("agenda_slots", {
       p_clinic: clinic.id, p_professional: professional.id, p_day: day,
@@ -119,6 +120,8 @@ export default async function Page({ searchParams }: { searchParams: Promise<Par
     historyBooking?.data ? client.from("appointment_events")
       .select("id,revision,occurred_at,actor_id,previous_status,status,previous_start,starts_at,previous_professional,professional_id")
       .eq("clinic_id", clinic.id).eq("appointment_id", historyBooking.data.id).order("id", { ascending: false }).limit(50) : null,
+    professional ? client.from("professional_hours").select("opens_at,closes_at,break_from,break_until")
+      .eq("clinic_id", clinic.id).eq("professional_id", professional.id).eq("weekday", weekday).maybeSingle() : null,
   ]);
   const bookings = (agenda.data ?? []) as Booking[];
   const agendaStatus = agendaStatusFilter(query("agendaStatus"));
@@ -132,6 +135,7 @@ export default async function Page({ searchParams }: { searchParams: Promise<Par
     if (agendaStatus && agendaStatus !== "open" && booking.status !== agendaStatus) return false;
     return !patientKey || agendaPatientKey(booking.patient_name).includes(patientKey);
   });
+  const hours = hoursResult?.data;
   const slots = (slotResult?.data ?? []) as Slot[];
   const google = professional && (!requestedClinic || selectedClinic) ? await googleAvailability(
     clinic.id, professional.id, slots, {
@@ -348,6 +352,11 @@ export default async function Page({ searchParams }: { searchParams: Promise<Par
                 <input type="hidden" name="revision" value={moving.revision} />
               </>}
               <p className="subtle">Vagas em {dayLabel} · {professional.name}</p>
+              {hours && <p className="subtle">{hours.opens_at
+                ? <>Horário de trabalho {hours.opens_at.slice(0, 5)} – {hours.closes_at?.slice(0, 5)}
+                  {hours.break_from && <> · Pausa {hours.break_from.slice(0, 5)} – {hours.break_until?.slice(0, 5)}</>}
+                </>
+                : "Profissional sem atendimento nesta data."}</p>}
               {google.status === "checked" && <p className="subtle">
                 {google.occupied.size
                   ? "Os horários ocupados no Google Agenda estão sinalizados para conferência."

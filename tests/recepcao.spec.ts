@@ -304,3 +304,54 @@ test("busca paciente e bloqueia ou devolve uma vaga sem sobrepor consultas", asy
     await stack.removeUser(user);
   }
 });
+
+test("usa a grade do profissional com pausa, dia fechado e sábado", async ({ page }) => {
+  const stack = localStack();
+  const user = await stack.user(clinicA, "grade-profissional");
+  const monday = new Date();
+  monday.setUTCDate(monday.getUTCDate() + 105);
+  while (monday.getUTCDay() !== 1) monday.setUTCDate(monday.getUTCDate() + 1);
+  const day = (offset = 0) => new Date(+monday + offset * 86_400_000).toISOString().slice(0, 10);
+  const patient = "Paciente fictício " + randomUUID();
+  const prior = patient + " anterior";
+  const key = { clinic_id: clinicA, professional_id: professionalA };
+
+  try {
+    unwrap(await stack.admin.from("appointments").insert({
+      ...key, patient_name: prior, starts_at: day() + "T12:00:00Z", ends_at: day() + "T12:30:00Z",
+    }));
+    unwrap(await stack.admin.from("professional_hours").insert([
+      { ...key, weekday: 1, opens_at: "10:00", closes_at: "14:00", break_from: "12:00", break_until: "13:00" },
+      { ...key, weekday: 2 },
+      { ...key, weekday: 6, opens_at: "07:00", closes_at: "08:00" },
+    ]));
+    const member = stack.client();
+    expect((await member.auth.signInWithPassword({ email: user.email, password: user.password })).error).toBeNull();
+    const rpc = (date: string, hour: string, action = "book", appointment?: string) =>
+      member.rpc("agenda_change", { p_clinic: clinicA, p_professional: professionalA,
+        p_start: date + "T" + hour + ":00Z", p_patient: patient, p_action: action,
+        p_appointment: appointment, p_revision: appointment ? 0 : undefined });
+    expect((await rpc(day(), "11:00")).error?.code).toBe("22023");
+    expect((await rpc(day(1), "13:00")).error?.code).toBe("22023");
+    const saturday = unwrap(await rpc(day(5), "10:00"));
+    expect((await rpc(day(), "15:00", "move", saturday)).error?.code).toBe("22023");
+    expect((await member.from("professional_hours").delete().eq("professional_id", professionalA)).error?.code).toBe("42501");
+
+    await enter(page, user);
+    await page.goto(`/?day=${day()}&professional=${professionalA}`);
+    await expect(page.getByText("Horário de trabalho 10:00 – 14:00 · Pausa 12:00 – 13:00")).toBeVisible();
+    await expect(page.getByRole("article").filter({ hasText: prior })).toBeVisible();
+    const time = page.getByRole("combobox", { name: "Horário", exact: true });
+    await expect(time.locator("option", { hasText: "12:00 – 12:30" })).toHaveCount(0);
+    await page.getByRole("link", { name: "Ver vagas da semana" }).click();
+    const week = page.getByRole("region", { name: "Vagas nos próximos 7 dias" });
+    await expect(week.getByRole("link", { name: "6 vagas · a partir de 10:00" })).toBeVisible();
+    await expect(week.getByRole("link", { name: "1 vaga · a partir de 07:30" })).toBeVisible();
+    await page.getByRole("link", { name: "Próximo dia" }).click();
+    await expect(page.getByText("Profissional sem atendimento nesta data.")).toBeVisible();
+  } finally {
+    unwrap(await stack.admin.from("professional_hours").delete().eq("clinic_id", clinicA).eq("professional_id", professionalA));
+    unwrap(await stack.admin.from("appointments").delete().in("patient_name", [patient, prior]));
+    await stack.removeUser(user);
+  }
+});
