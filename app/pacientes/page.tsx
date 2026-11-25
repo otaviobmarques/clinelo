@@ -1,3 +1,4 @@
+import { Navigation } from "../navigation";
 import { waitingUrl } from "../../lib/waiting";
 import Link from "next/link";
 import { redirect } from "next/navigation";
@@ -117,7 +118,7 @@ export default async function PatientsPage({ searchParams }: {
   const timestamp = new Intl.DateTimeFormat("pt-BR", { dateStyle: "short", timeStyle: "short", timeZone: clinic.timezone });
 
   return <>
-    <header className="topbar"><div className="topbar-inner">
+    <Navigation clinic={clinic.id} /><header className="topbar"><div className="topbar-inner">
       <Link className="secondary button" href={agendaUrl({ clinic: clinic.id })}>Voltar à agenda</Link>
       <form action={logout}><button className="secondary">Sair</button></form>
     </div></header>

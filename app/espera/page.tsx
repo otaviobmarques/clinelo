@@ -1,3 +1,4 @@
+import { Navigation } from "../navigation";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { logout } from "../actions";
@@ -86,7 +87,7 @@ export default async function WaitingPage({ searchParams }: { searchParams: Prom
   const success = ["create", "book", "withdraw"].includes(notice);
 
   return <>
-    <header className="topbar"><div className="topbar-inner">
+    <Navigation clinic={clinic.id} /><header className="topbar"><div className="topbar-inner">
       <nav className="date-nav" aria-label="Recepção">
         <Link className="secondary button" href={receptionUrl(clinic.id)}>Painel</Link>
         <Link className="secondary button" href={agendaUrl({ clinic: clinic.id })}>Agenda</Link>

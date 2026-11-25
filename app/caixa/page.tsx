@@ -1,3 +1,4 @@
+import { Navigation } from "../navigation";
 import { randomUUID } from "node:crypto";
 import { receptionUrl } from "../../lib/reception";
 import { QueueWait } from "./queue-wait";
@@ -136,7 +137,7 @@ export default async function Inbox({ searchParams }: { searchParams: Promise<Pa
   const success = ["create", "note", "close", "reopen", "claim", "release", "patientLinked", "patientUnlinked", "replyAccepted"].includes(notice);
 
   return <>
-    <header className="topbar"><div className="topbar-inner">
+    <Navigation clinic={clinic.id} /><header className="topbar"><div className="topbar-inner">
       <nav className="date-nav" aria-label="Recepção">
         <Link href={receptionUrl(clinic.id)} className="secondary button">Painel</Link>
         <Link href={agendaUrl({ clinic: clinic.id })} className="button secondary">Voltar à agenda</Link>

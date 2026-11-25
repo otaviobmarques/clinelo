@@ -1,3 +1,4 @@
+import { Navigation } from "../navigation";
 import { waitingUrl } from "../../lib/waiting";
 import Link from "next/link";
 import { redirect } from "next/navigation";
@@ -40,7 +41,7 @@ export default async function ReceptionPage({ searchParams }: {
   const time = new Intl.DateTimeFormat("pt-BR", { hour: "2-digit", minute: "2-digit", timeZone: clinic.timezone });
 
   return <>
-    <header className="topbar"><div className="topbar-inner">
+    <Navigation clinic={clinic.id} /><header className="topbar"><div className="topbar-inner">
       <nav className="date-nav" aria-label="Recepção">
         <Link className="button secondary" href={agendaUrl({ clinic: clinic.id, day })}>Agenda</Link>
         <Link className="button secondary" href={inboxUrl({ clinic: clinic.id })}>Caixa compartilhada</Link>
