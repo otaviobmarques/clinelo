@@ -85,20 +85,25 @@ export default async function Page({ searchParams }: { searchParams: Promise<Par
   const today = localDay(clinic.timezone);
   const day = validDay(query("day")) ? query("day") : today;
   const edit = validId(query("edit")) ? query("edit") : "";
-  const [staff, agenda, target] = await Promise.all([
+  const [staff, target] = await Promise.all([
     client.from("professionals").select("id,name").eq("clinic_id", clinic.id).order("name"),
-    client.rpc("agenda_day", { p_clinic: clinic.id, p_day: day }),
     edit ? client.from("appointments").select("*").eq("clinic_id", clinic.id).eq("id", edit).maybeSingle() : null,
   ]);
   const professionals = (staff.data ?? []) as Professional[];
-  const bookings = (agenda.data ?? []) as Booking[];
+  const agendaProfessional = professionals.find(({ id }) => id === query("agendaProfessional"));
+  const dayQuery = client.rpc("agenda_day", { p_clinic: clinic.id, p_day: day });
+  if (agendaProfessional) dayQuery.eq("professional_id", agendaProfessional.id);
   const candidate = target?.data as Booking | undefined;
   const moving = candidate && ["scheduled", "confirmed"].includes(candidate.status) ? candidate : undefined;
   const professional = [query("professional"), moving?.professional_id]
     .map((id) => professionals.find((person) => person.id === id)).find(Boolean) ?? professionals[0];
-  const slotResult = professional ? await client.rpc("agenda_slots", {
-    p_clinic: clinic.id, p_professional: professional.id, p_day: day,
-  }) : null;
+  const [agenda, slotResult] = await Promise.all([
+    dayQuery,
+    professional ? client.rpc("agenda_slots", {
+      p_clinic: clinic.id, p_professional: professional.id, p_day: day,
+    }) : null,
+  ]);
+  const bookings = (agenda.data ?? []) as Booking[];
   const slots = (slotResult?.data ?? []) as Slot[];
   const google = professional && (!requestedClinic || selectedClinic) ? await googleAvailability(
     clinic.id, professional.id, slots, {
@@ -106,7 +111,7 @@ export default async function Page({ searchParams }: { searchParams: Promise<Par
       account: process.env.GOOGLE_CALENDAR_SERVICE_ACCOUNT_JSON,
     },
   ) : { status: "disconnected" as const };
-  const scope = { clinic: clinic.id, day, professional: professional?.id, edit: moving?.id };
+  const scope = { clinic: clinic.id, day, professional: professional?.id, agendaProfessional: agendaProfessional?.id, edit: moving?.id };
   const dayLabel = new Intl.DateTimeFormat("pt-BR", {
     dateStyle: "full", timeZone: "UTC",
   }).format(new Date(day + "T12:00:00Z"));
@@ -154,8 +159,20 @@ export default async function Page({ searchParams }: { searchParams: Promise<Par
               {validDay(shiftDay(day, 1)) && <Link className="secondary button" aria-label="Próximo dia" href={agendaUrl({ ...scope, day: shiftDay(day, 1) })}>›</Link>}
             </nav>
           </div>
+          {professionals.length > 1 && <form method="get" className="agenda-list-filter"
+            key={`agenda-list-${agendaProfessional?.id ?? "all"}`}>
+            <input type="hidden" name="clinic" value={clinic.id} />
+            <input type="hidden" name="day" value={day} />
+            {professional && <input type="hidden" name="professional" value={professional.id} />}
+            {moving && <input type="hidden" name="edit" value={moving.id} />}
+            <label>Profissional da agenda<select name="agendaProfessional" defaultValue={agendaProfessional?.id ?? ""}>
+              <option value="">Todos os profissionais</option>
+              {professionals.map((person) => <option key={person.id} value={person.id}>{person.name}</option>)}
+            </select></label>
+            <button className="secondary">Filtrar agenda</button>
+          </form>}
           <div className="visits">
-            {!agenda.error && !bookings.length && <p className="empty">Nenhum agendamento para este dia.</p>}
+            {!agenda.error && !bookings.length && <p className="empty">{agendaProfessional ? "Nenhum agendamento para este profissional no dia." : "Nenhum agendamento para este dia."}</p>}
             {bookings.map((booking) => <article className="visit" key={booking.id}>
               <div className="visit-time"><strong>{formatTime(booking.starts_at)}</strong><span>{formatTime(booking.ends_at)}</span></div>
               <div className="visit-details">
@@ -171,6 +188,7 @@ export default async function Page({ searchParams }: { searchParams: Promise<Par
                     <input type="hidden" name="clinic" value={clinic.id} />
                     <input type="hidden" name="day" value={day} />
                     <input type="hidden" name="professional" value={professional?.id ?? ""} />
+                    <input type="hidden" name="agendaProfessional" value={agendaProfessional?.id ?? ""} />
                     <input type="hidden" name="operation" value="cancel" />
                     <input type="hidden" name="appointment" value={booking.id} />
                     <input type="hidden" name="revision" value={booking.revision} />
@@ -186,6 +204,7 @@ export default async function Page({ searchParams }: { searchParams: Promise<Par
             <h2 id="booking-title">{moving ? "Remarcar consulta" : "Novo agendamento"}</h2>
             {moving && <p className="subtle">{moving.patient_name} · <Link href={agendaUrl({ ...scope, edit: undefined })}>Sair da remarcação</Link></p>}
             <form method="get" className="filters" key={`filters-${agendaUrl(scope)}`}>
+              <input type="hidden" name="agendaProfessional" value={agendaProfessional?.id ?? ""} />
               <input type="hidden" name="clinic" value={clinic.id} />
               {moving && <input type="hidden" name="edit" value={moving.id} />}
               <label>Data<input type="date" name="day" defaultValue={day} required /></label>
@@ -199,6 +218,7 @@ export default async function Page({ searchParams }: { searchParams: Promise<Par
               <input type="hidden" name="clinic" value={clinic.id} />
               <input type="hidden" name="day" value={day} />
               <input type="hidden" name="professional" value={professional.id} />
+              <input type="hidden" name="agendaProfessional" value={agendaProfessional?.id ?? ""} />
               <input type="hidden" name="operation" value={moving ? "move" : "book"} />
               {moving && <>
                 <input type="hidden" name="appointment" value={moving.id} />

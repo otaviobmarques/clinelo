@@ -27,6 +27,7 @@ export async function changeBooking(form: FormData) {
   const clinic = field(form, "clinic");
   const day = field(form, "day");
   const professional = field(form, "professional");
+  const agendaProfessional = field(form, "agendaProfessional");
   const action = field(form, "operation");
   const appointment = field(form, "appointment");
   const revision = field(form, "revision");
@@ -37,6 +38,7 @@ export async function changeBooking(form: FormData) {
     clinic: validId(clinic) ? clinic : undefined,
     day: validDay(day) ? day : undefined,
     professional: validId(professional) ? professional : undefined,
+    agendaProfessional: validId(agendaProfessional) ? agendaProfessional : undefined,
   };
   const editing = action === "move" && validId(appointment) ? appointment : undefined;
   if (!location.clinic || !location.day || !["book", "move", "cancel"].includes(action)
