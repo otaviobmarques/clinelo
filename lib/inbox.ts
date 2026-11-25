@@ -13,9 +13,23 @@ export function inboxAssignment(value: unknown): InboxAssignment | undefined {
   return value === "mine" || value === "unassigned" ? value : undefined;
 }
 
-export function inboxUrl(
-  clinic?: string, status?: InboxStatus, thread?: string, notice?: string, page = 1, channel?: InboxChannel, assignment?: InboxAssignment,
-) {
+export function inboxSearch(value: unknown): string {
+  return typeof value === "string" ? Array.from(value.trim().replaceAll("\0", "")).slice(0, 120).join("") : "";
+}
+
+type InboxLocation = {
+  clinic?: string;
+  status?: InboxStatus;
+  thread?: string;
+  notice?: string;
+  page?: number;
+  channel?: InboxChannel;
+  assignment?: InboxAssignment;
+  query?: string;
+  historyPage?: number;
+};
+
+export function inboxUrl({ clinic, status, thread, notice, page = 1, channel, assignment, query, historyPage = 1 }: InboxLocation = {}) {
   const params = new URLSearchParams();
   if (clinic) params.set("clinic", clinic);
   if (status) params.set("status", status);
@@ -24,5 +38,7 @@ export function inboxUrl(
   if (notice) params.set("notice", notice);
   if (channel) params.set("channel", channel);
   if (status !== "closed" && assignment) params.set("assignment", assignment);
+  if (query) params.set("q", query);
+  if (historyPage > 1) params.set("historyPage", String(historyPage));
   return params.size ? "/caixa?" + params : "/caixa";
 }

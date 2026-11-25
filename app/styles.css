@@ -96,3 +96,6 @@ textarea {
   font: inherit; color: var(--ink); border: 1px solid #b8ccc8;
   border-radius: 8px; padding: 8px 10px; width: 100%; resize: vertical;
 }
+
+.inbox-search { display: flex; flex-wrap: wrap; align-items: end; gap: 8px; margin-top: 14px; }
+.inbox-search label { flex: 1 1 210px; }

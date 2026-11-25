@@ -24,7 +24,7 @@ test("compartilha notas entre colegas e isola o atendimento de outras clínicas"
 
     await signIn(page, users[0]);
     await page.getByRole("link", { name: "Caixa compartilhada" }).click();
-    await page.getByLabel("Assunto").fill(subject);
+    await page.getByLabel("Assunto", { exact: true }).fill(subject);
     await page.getByRole("button", { name: "Criar atendimento" }).click();
     await expect(page.getByRole("status")).toHaveText("Atendimento criado.");
     const assignments = page.getByRole("navigation", { name: "Filtrar por responsável" });
@@ -105,5 +105,50 @@ test("compartilha notas entre colegas e isola o atendimento de outras clínicas"
     for (const context of contexts) await context.close();
     unwrap(await stack.admin.from("inbox_threads").delete().eq("subject", subject));
     for (const user of users) await stack.removeUser(user);
+  }
+});
+
+test("busca por assunto combina acentos, texto literal e filtros da clínica", async ({ page }) => {
+  const stack = localStack();
+  const user = await stack.user(clinicA, "busca");
+  const marker = randomUUID();
+  const rows = [
+    { clinic_id: clinicA, subject: `Revisão % ${marker}`, status: "open" },
+    { clinic_id: clinicA, subject: `Revisão X ${marker}`, status: "open" },
+    { clinic_id: clinicA, subject: `Revisão % ${marker} encerrada`, status: "closed" },
+    { clinic_id: clinicB, subject: `Revisão % ${marker} outra clínica`, status: "open" },
+  ];
+  const [matching, wildcard, closed, other] = rows.map(({ subject }) => subject);
+
+  try {
+    unwrap(await stack.admin.from("inbox_threads").insert(rows));
+    await signIn(page, user);
+    await page.getByRole("link", { name: "Caixa compartilhada" }).click();
+    const search = page.getByRole("search");
+    const term = "REVISAO % " + marker;
+    const input = search.getByRole("searchbox", { name: "Buscar por assunto" });
+    const queue = page.getByRole("region", { name: "Atendimentos" });
+    await input.fill(term);
+    await search.getByRole("button", { name: "Buscar", exact: true }).click();
+
+    await expect(page).toHaveURL(/[?&]q=/);
+    await expect(queue.getByRole("link", { name: matching, exact: true })).toBeVisible();
+    for (const subject of [wildcard, closed, other]) {
+      await expect(queue.getByRole("link", { name: subject, exact: true })).toHaveCount(0);
+    }
+
+    await queue.getByRole("link", { name: "WhatsApp", exact: true }).click();
+    await expect(queue.getByText("Nenhum atendimento encontrado.")).toBeVisible();
+    await expect(input).toHaveValue(term);
+    await queue.getByRole("link", { name: "Todas as origens" }).click();
+    await expect(queue.getByRole("link", { name: matching, exact: true })).toBeVisible();
+    await queue.getByRole("link", { name: "Encerrados" }).click();
+    await expect(queue.getByRole("link", { name: closed, exact: true })).toBeVisible();
+    await expect(input).toHaveValue(term);
+    await search.getByRole("link", { name: "Limpar busca" }).click();
+    await expect(input).toHaveValue("");
+  } finally {
+    unwrap(await stack.admin.from("inbox_threads").delete().in("subject", rows.map(({ subject }) => subject)));
+    await stack.removeUser(user);
   }
 });
