@@ -73,14 +73,16 @@ test("recebe texto assinado, ignora reenvios e isola a caixa da clínica", async
     await expect(page.getByText("WhatsApp ·", { exact: false }).filter({ has: page.locator("time") })).toHaveCount(2);
 
     const origins = page.getByRole("navigation", { name: "Filtrar por origem" });
-    await origins.getByRole("link", { name: "WhatsApp", exact: true }).click();
+    const whatsappFilter = origins.getByRole("link", { name: "WhatsApp", exact: true });
+    await whatsappFilter.click();
+    await expect(whatsappFilter).toHaveAttribute("aria-current", "page");
     const queue = page.getByRole("region", { name: "Atendimentos" });
     const whatsappLink = queue.locator(`a[href*="thread=${threadId}"]`);
     await expect(whatsappLink).toBeVisible();
     await whatsappLink.click();
     await page.getByRole("button", { name: "Encerrar atendimento" }).click();
     await expect(page.getByRole("status")).toHaveText("Atendimento encerrado.");
-    expect(new URL(page.url()).searchParams.get("channel")).toBe("whatsapp");
+    await expect(page).toHaveURL(/[?&]channel=whatsapp(?:&|$)/);
     await expect(whatsappLink).toBeVisible();
     await page.getByRole("button", { name: "Reabrir atendimento" }).click();
     await expect(page.getByRole("status")).toHaveText("Atendimento reaberto.");
@@ -91,7 +93,8 @@ test("recebe texto assinado, ignora reenvios e isola a caixa da clínica", async
     await expect(origins.getByRole("link", { name: "Manual" })).toHaveAttribute("aria-current", "page");
     await expect(queue.getByRole("link", { name: manual })).toBeVisible();
     await expect(whatsappLink).toHaveCount(0);
-    await origins.getByRole("link", { name: "WhatsApp", exact: true }).click();
+    await whatsappFilter.click();
+    await expect(whatsappFilter).toHaveAttribute("aria-current", "page");
     await expect(whatsappLink).toBeVisible();
     await expect(queue.getByRole("link", { name: manual })).toHaveCount(0);
   } finally {
