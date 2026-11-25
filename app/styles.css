@@ -117,3 +117,10 @@ textarea {
 
 .grade-impact { margin-top: 24px; padding-top: 8px; border-top: 1px solid var(--line); }
 .visit-details .warning-tag { display: inline-block; color: #664108; background: #fff1ce; }
+
+.reception-columns { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.reception-metrics { display: grid; grid-template-columns: repeat(auto-fit, minmax(112px, 1fr)); gap: 8px; list-style: none; margin: 16px 0; padding: 0; }
+.reception-metrics a { display: grid; gap: 4px; padding: 10px 12px; border-radius: 12px; background: var(--bg, #f4f8f7); border: 1px solid var(--line); text-decoration: none; }
+.reception-metrics a:hover { text-decoration: underline; }
+.reception-metrics strong { font-size: 1.4rem; font-variant-numeric: tabular-nums; }
+@media (max-width: 760px) { .reception-columns { grid-template-columns: 1fr; } }
