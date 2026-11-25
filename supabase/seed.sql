@@ -27,3 +27,8 @@ insert into public.inbox_threads (id, clinic_id, subject, status) values
 insert into public.inbox_notes (clinic_id, thread_id, body) values
   ('10000000-0000-4000-8000-000000000001', '30000000-0000-4000-8000-000000000001', 'A equipe deve conferir as vagas da próxima semana.'),
   ('10000000-0000-4000-8000-000000000002', '30000000-0000-4000-8000-000000000002', 'Exemplo de atendimento encerrado pela recepção.');
+
+-- Cadastros fictícios para a demonstração da recepção.
+insert into public.patients (clinic_id, name, email) values
+  ('10000000-0000-4000-8000-000000000001', 'Pessoa Fictícia Horizonte', 'horizonte@example.test'),
+  ('10000000-0000-4000-8000-000000000002', 'Pessoa Fictícia Sorriso', 'sorriso@example.test');

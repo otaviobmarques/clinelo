@@ -8,6 +8,7 @@ export type Booking = Slot & {
   status: keyof typeof statusLabels;
   revision: number;
   is_block: boolean;
+  patient_id: string | null;
   inbox_thread_id: string | null;
 };
 
@@ -57,6 +58,7 @@ export const messages = {
   attended: "Comparecimento registrado.",
   absent: "Falta registrada.",
   attendanceUndone: "Registro de presença desfeito.",
+  patientUnavailable: "O cadastro ou atendimento vinculado está indisponível para agendamento.",
   threadUnavailable: "O atendimento não está aberto para receber uma consulta.",
   conflict: "O horário acabou de ser ocupado. Escolha outra vaga.",
   changed: "O agendamento já foi alterado. Confira a agenda atualizada.",

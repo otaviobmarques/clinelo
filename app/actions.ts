@@ -34,6 +34,7 @@ export async function changeBooking(form: FormData) {
   const revision = field(form, "revision");
   const start = field(form, "start");
   const history = field(form, "history");
+  const patientId = field(form, "patientId");
   const patient = field(form, "patient").trim();
 
   const location = {
@@ -45,6 +46,7 @@ export async function changeBooking(form: FormData) {
     block: action === "block" ? "1" : undefined,
     agendaStatus: agendaStatusFilter(field(form, "agendaStatus")),
     history: validId(history) ? history : undefined,
+    patientId: validId(patientId) ? patientId : undefined,
     thread: validId(thread) ? thread : undefined,
     week: field(form, "week") === "1" ? "1" : undefined,
   };
@@ -57,13 +59,18 @@ export async function changeBooking(form: FormData) {
   if (!location.clinic || !location.day || (!needsSlot && !cancels && !statusChange && !undoAttendance)
     || (!creates && (!validId(appointment) || !/^\d{1,10}$/.test(revision) || Number(revision) > 2147483647))
     || (needsSlot && (!location.professional || !Number.isFinite(Date.parse(start))))
-    || (action === "book" && ((thread && !location.thread) || !patient))
-    || (creates && Array.from(patient).length > 120) || (action === "block" && thread)) {
+    || (action === "book" && ((thread && !location.thread) || (patientId && !location.patientId) || (!patientId && !patient)))
+    || (creates && Array.from(patient).length > 120) || (action === "block" && (thread || patientId))) {
     redirect(agendaUrl({ ...location, edit: editing, notice: "invalid" }));
   }
 
   const client = await supabase();
-  const { error } = undoAttendance
+  const { error } = action === "book" && location.patientId
+    ? await client.rpc("agenda_book_for_patient", {
+      p_clinic: clinic, p_patient: location.patientId, p_professional: professional,
+      p_start: new Date(start).toISOString(), p_thread: location.thread ?? null,
+    })
+    : undoAttendance
     ? await client.rpc("agenda_undo_attendance", { p_clinic: clinic, p_appointment: appointment, p_revision: Number(revision) })
     : action === "block"
     ? await client.rpc("agenda_block", {
@@ -95,6 +102,7 @@ export async function changeBooking(form: FormData) {
     ...location,
     block: error ? location.block : undefined,
     edit: error?.code === "23P01" || error?.code === "40P01" || error?.code === "22023" ? editing : undefined,
-    notice: error ? (location.thread && action === "book" && error.code === "P0001" ? "threadUnavailable" : notices[error.code] ?? "error") : success,
+    notice: error ? (location.patientId && action === "book" && error.code === "P0001" ? "patientUnavailable"
+      : location.thread && action === "book" && error.code === "P0001" ? "threadUnavailable" : notices[error.code] ?? "error") : success,
   }));
 }
