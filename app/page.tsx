@@ -1,3 +1,4 @@
+import { LoginButton } from "./login-button";
 import { receptionUrl } from "../lib/reception";
 import Link from "next/link";
 import { WeeklyAvailability, type AvailabilityDay } from "./weekly-availability";
@@ -67,8 +68,9 @@ export default async function Page({ searchParams }: { searchParams: Promise<Par
       <form action={login}>
         <label>E-mail<input type="email" name="email" autoComplete="username" required /></label>
         <label>Senha<input type="password" name="password" autoComplete="current-password" required /></label>
-        <button>Entrar</button>
+        <LoginButton />
       </form>
+      <p><Link href="/site">Conheça o Clinelo</Link></p>
     </section>
   </main>;
 
