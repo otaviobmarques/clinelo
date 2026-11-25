@@ -2,7 +2,7 @@
 
 import { redirect } from "next/navigation";
 import { validId } from "../../lib/agenda";
-import { inboxUrl } from "../../lib/inbox";
+import { inboxChannel, inboxUrl } from "../../lib/inbox";
 import { supabase } from "../../lib/supabase";
 
 export async function changeInbox(form: FormData) {
@@ -11,12 +11,13 @@ export async function changeInbox(form: FormData) {
   const operation = String(form.get("operation") ?? "");
   const text = String(form.get("text") ?? "").trim();
   const status = form.get("status") === "closed" ? "closed" : "open";
-  if (!validId(clinic)) redirect(inboxUrl(undefined, status, undefined, "invalid"));
+  const channel = inboxChannel(form.get("channel"));
+  if (!validId(clinic)) redirect(inboxUrl(undefined, status, undefined, "invalid", 1, channel));
   const selected = validId(thread) ? thread : undefined;
   if (!["create", "note", "close", "reopen"].includes(operation)
     || (operation !== "create" && !selected)
     || (["create", "note"].includes(operation) && (!text || Array.from(text).length > (operation === "create" ? 120 : 2000)))) {
-    redirect(inboxUrl(clinic, status, selected, "invalid"));
+    redirect(inboxUrl(clinic, status, selected, "invalid", 1, channel));
   }
 
   const client = await supabase();
@@ -26,9 +27,10 @@ export async function changeInbox(form: FormData) {
 
   if (error) {
     const code = error.code === "42501" ? "access" : error.code === "P0001" ? "changed" : "error";
-    redirect(inboxUrl(clinic, status, selected, code));
+    redirect(inboxUrl(clinic, status, selected, code, 1, channel));
   }
 
   const nextStatus = operation === "close" ? "closed" : operation === "note" ? status : "open";
-  redirect(inboxUrl(clinic, nextStatus, data, operation));
+  const nextChannel = operation === "create" && channel === "whatsapp" ? "manual" : channel;
+  redirect(inboxUrl(clinic, nextStatus, data, operation, 1, nextChannel));
 }
