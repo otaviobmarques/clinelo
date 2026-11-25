@@ -69,6 +69,7 @@ export default async function Page({ searchParams }: { searchParams: Promise<Par
         <label>Senha<input type="password" name="password" autoComplete="current-password" required /></label>
         <button>Entrar</button>
       </form>
+      <p><Link href="/site">Conheça o Clinelo</Link></p>
     </section>
   </main>;
 
