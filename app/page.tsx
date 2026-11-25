@@ -7,6 +7,7 @@ import {
 } from "../lib/agenda";
 import { whatsappConfigured } from "../lib/whatsapp";
 import { gradeUrl } from "../lib/grade";
+import { patientsUrl } from "../lib/patients";
 import { inboxUrl } from "../lib/inbox";
 import { googleAvailability, type GoogleAvailability } from "../lib/google-calendar";
 import { supabase, supabaseSettings } from "../lib/supabase";
@@ -90,7 +91,8 @@ export default async function Page({ searchParams }: { searchParams: Promise<Par
   const edit = validId(query("edit")) ? query("edit") : "";
   const history = validId(query("history")) && (!requestedClinic || selectedClinic) ? query("history") : undefined;
   const requestedThread = !edit ? query("thread") : "";
-  const [staff, target, originResult, historyBooking, gradeAccess] = await Promise.all([
+  const requestedPatient = !edit ? query("patientId") : "";
+  const [staff, target, originResult, historyBooking, gradeAccess, patientResult] = await Promise.all([
     client.from("professionals").select("id,name").eq("clinic_id", clinic.id).order("name"),
     edit ? client.from("appointments").select("*").eq("clinic_id", clinic.id).eq("id", edit).maybeSingle() : null,
     validId(requestedThread) && (!requestedClinic || selectedClinic)
@@ -99,7 +101,11 @@ export default async function Page({ searchParams }: { searchParams: Promise<Par
     history ? client.from("appointments").select("*").eq("clinic_id", clinic.id)
       .eq("id", history).eq("is_block", false).maybeSingle() : null,
     client.from("clinic_members").select("can_manage_hours").eq("clinic_id", clinic.id).eq("user_id", user.id).maybeSingle(),
+    validId(requestedPatient) && (!requestedClinic || selectedClinic) ? client.from("patients").select("id,name,archived")
+      .eq("clinic_id", clinic.id).eq("id", requestedPatient).maybeSingle() : null,
   ]);
+  const selectedPatient = patientResult?.data;
+  const validPatient = !requestedPatient || selectedPatient?.archived === false;
   const origin = originResult?.data;
   const validOrigin = !requestedThread || origin?.status === "open";
   const professionals = (staff.data ?? []) as Professional[];
@@ -135,7 +141,7 @@ export default async function Page({ searchParams }: { searchParams: Promise<Par
   const agendaStatus = agendaStatusFilter(query("agendaStatus"));
   const patientQuery = agendaPatientQuery(query("patientQuery"));
   const patientKey = agendaPatientKey(patientQuery);
-  const blocking = query("block") === "1" && !moving && !requestedThread;
+  const blocking = query("block") === "1" && !moving && !requestedThread && !requestedPatient;
   const visibleBookings = bookings.filter((booking) => {
     if (agendaStatus === "blocked") return booking.is_block && bookingIsOpen(booking) && !patientKey;
     if (booking.is_block) return !agendaStatus && !patientKey;
@@ -151,7 +157,7 @@ export default async function Page({ searchParams }: { searchParams: Promise<Par
       account: process.env.GOOGLE_CALENDAR_SERVICE_ACCOUNT_JSON,
     },
   ) : { status: "disconnected" as const };
-  const scope = { clinic: clinic.id, day, professional: professional?.id, agendaProfessional: agendaProfessional?.id, agendaStatus, patientQuery, history, block: blocking ? "1" : undefined, week: week ? "1" : undefined, thread: validId(requestedThread) ? requestedThread : undefined, edit: moving?.id };
+  const scope = { clinic: clinic.id, day, professional: professional?.id, agendaProfessional: agendaProfessional?.id, agendaStatus, patientQuery, history, patientId: validId(requestedPatient) ? requestedPatient : undefined, block: blocking ? "1" : undefined, week: week ? "1" : undefined, thread: validId(requestedThread) ? requestedThread : undefined, edit: moving?.id };
   const dayLabel = new Intl.DateTimeFormat("pt-BR", {
     dateStyle: "full", timeZone: "UTC",
   }).format(new Date(day + "T12:00:00Z"));
@@ -186,6 +192,7 @@ export default async function Page({ searchParams }: { searchParams: Promise<Par
     {patientQuery && <input type="hidden" name="patientQuery" value={patientQuery} />}
     {week && <input type="hidden" name="week" value="1" />}
     {scope.thread && <input type="hidden" name="thread" value={scope.thread} />}
+    {scope.patientId && <input type="hidden" name="patientId" value={scope.patientId} />}
     {history && <input type="hidden" name="history" value={history} />}
     <input type="hidden" name="appointment" value={booking.id} />
     <input type="hidden" name="revision" value={booking.revision} />
@@ -196,6 +203,7 @@ export default async function Page({ searchParams }: { searchParams: Promise<Par
       <Brand />
       <nav className="date-nav" aria-label="Recepção">
         {gradeAccess.data?.can_manage_hours && <Link href={gradeUrl({ clinic: clinic.id })} className="secondary button">Administrar grade</Link>}
+        <Link href={patientsUrl({ clinic: clinic.id })} className="secondary button">Pacientes</Link>
         <Link href={inboxUrl({ clinic: clinic.id })} className="secondary button">Caixa compartilhada</Link>
         <form action={logout}><button className="secondary">Sair</button></form>
       </nav>
@@ -235,6 +243,7 @@ export default async function Page({ searchParams }: { searchParams: Promise<Par
             <input type="hidden" name="day" value={day} />
             {week && <input type="hidden" name="week" value="1" />}
             {scope.thread && <input type="hidden" name="thread" value={scope.thread} />}
+              {scope.patientId && <input type="hidden" name="patientId" value={scope.patientId} />}
             {blocking && <input type="hidden" name="block" value="1" />}
             {professional && <input type="hidden" name="professional" value={professional.id} />}
             {moving && <input type="hidden" name="edit" value={moving.id} />}
@@ -258,6 +267,7 @@ export default async function Page({ searchParams }: { searchParams: Promise<Par
                 <span>{professionals.find(({ id }) => id === booking.professional_id)?.name ?? "Profissional"}</span>
                 {!booking.is_block && <Link href={agendaUrl({ ...scope, history: booking.id }) + "#historico-consulta"}>Ver histórico</Link>}
                 {outsideIds.has(booking.id) && <span className="tag warning-tag">Fora da grade atual</span>}
+                {booking.patient_id && <Link href={patientsUrl({ clinic: clinic.id, patient: booking.patient_id })}>Ver ficha do paciente</Link>}
                 {booking.inbox_thread_id && <Link href={inboxUrl({ clinic: clinic.id, thread: booking.inbox_thread_id })}>Ver atendimento</Link>}
               </div>
               <span className={booking.status === "cancelled" ? "tag" : "tag active"}>{booking.is_block ? bookingIsOpen(booking) ? "Bloqueado" : "Liberado" : statusLabels[booking.status]}</span>
@@ -318,9 +328,13 @@ export default async function Page({ searchParams }: { searchParams: Promise<Par
         <aside>
           <section className="card booking-card" id="vagas" aria-labelledby="booking-title">
             <h2 id="booking-title">{moving ? "Remarcar consulta" : blocking ? "Bloquear horário" : "Novo agendamento"}</h2>
-            {!moving && !requestedThread && <Link href={agendaUrl({ ...scope, block: blocking ? undefined : "1" }) + "#vagas"}>
+            {!moving && !requestedThread && !requestedPatient && <Link href={agendaUrl({ ...scope, block: blocking ? undefined : "1" }) + "#vagas"}>
               {blocking ? "Voltar ao agendamento" : "Bloquear uma vaga"}
             </Link>}
+            {selectedPatient && <p className="subtle">Paciente: {selectedPatient.name} ·{" "}
+              <Link href={patientsUrl({ clinic: clinic.id, patient: selectedPatient.id, thread: scope.thread })}>Voltar à ficha</Link></p>}
+            {!validPatient && <p className="notice" role="alert">Cadastro indisponível para agendamento.{" "}
+              <Link href={patientsUrl({ clinic: clinic.id, thread: scope.thread })}>Escolher paciente</Link></p>}
             {origin && <p className="subtle">Atendimento: {origin.subject} ·{" "}
               <Link href={inboxUrl({ clinic: clinic.id, status: origin.status === "closed" ? "closed" : "open", thread: origin.id })}>
                 Voltar ao atendimento
@@ -337,6 +351,7 @@ export default async function Page({ searchParams }: { searchParams: Promise<Par
               {patientQuery && <input type="hidden" name="patientQuery" value={patientQuery} />}
               {week && <input type="hidden" name="week" value="1" />}
               {scope.thread && <input type="hidden" name="thread" value={scope.thread} />}
+              {scope.patientId && <input type="hidden" name="patientId" value={scope.patientId} />}
               <input type="hidden" name="clinic" value={clinic.id} />
               {moving && <input type="hidden" name="edit" value={moving.id} />}
               {blocking && <input type="hidden" name="block" value="1" />}
@@ -347,7 +362,7 @@ export default async function Page({ searchParams }: { searchParams: Promise<Par
               </select></label>
               <button className="secondary">Consultar vagas</button>
             </form>
-            {professional && validOrigin && !slotResult?.error && <form action={changeBooking} className="booking-form" key={`booking-${agendaUrl(scope)}`}>
+            {professional && validOrigin && validPatient && !slotResult?.error && <form action={changeBooking} className="booking-form" key={`booking-${agendaUrl(scope)}`}>
               <input type="hidden" name="clinic" value={clinic.id} />
               <input type="hidden" name="day" value={day} />
               <input type="hidden" name="professional" value={professional.id} />
@@ -356,6 +371,7 @@ export default async function Page({ searchParams }: { searchParams: Promise<Par
               {patientQuery && <input type="hidden" name="patientQuery" value={patientQuery} />}
               {week && <input type="hidden" name="week" value="1" />}
               {scope.thread && <input type="hidden" name="thread" value={scope.thread} />}
+              {scope.patientId && <input type="hidden" name="patientId" value={scope.patientId} />}
               <input type="hidden" name="operation" value={moving ? "move" : blocking ? "block" : "book"} />
               {moving && <>
                 <input type="hidden" name="appointment" value={moving.id} />
@@ -383,7 +399,7 @@ export default async function Page({ searchParams }: { searchParams: Promise<Par
                     {google.status === "checked" && google.occupied.has(slot.starts_at) && " · Ocupado no Google"}
                   </option>)}
                 </select></label>
-                {!moving && <label>{blocking ? "Motivo do bloqueio (opcional)" : "Nome do paciente"}
+                {!moving && !selectedPatient && <label>{blocking ? "Motivo do bloqueio (opcional)" : "Nome do paciente"}
                   <input name="patient" maxLength={120} required={!blocking} />
                 </label>}
                 <button>{moving ? "Salvar remarcação" : blocking ? "Confirmar bloqueio" : "Agendar consulta"}</button>

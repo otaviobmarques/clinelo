@@ -6,6 +6,7 @@ import { changeInbox } from "./actions";
 import { agendaUrl, localDay, statusLabels, validId, type Booking, type Clinic } from "../../lib/agenda";
 import { channelLabels, inboxAssignment, inboxChannel, inboxLabels, inboxSearch, inboxUrl, type InboxAssignment, type InboxChannel, type InboxStatus } from "../../lib/inbox";
 import { whatsappConfigured } from "../../lib/whatsapp";
+import { patientsUrl } from "../../lib/patients";
 import { supabase, supabaseSettings } from "../../lib/supabase";
 
 export const dynamic = "force-dynamic";
@@ -196,6 +197,8 @@ export default async function Inbox({ searchParams }: { searchParams: Promise<Pa
             <h3>Consultas vinculadas</h3>
             {thread.status === "open" && <Link className="secondary button"
               href={agendaUrl({ clinic: clinic.id, thread: thread.id }) + "#vagas"}>Agendar consulta para este atendimento</Link>}
+            {thread.status === "open" && <p className="subtle"><Link
+              href={patientsUrl({ clinic: clinic.id, thread: thread.id })}>Agendar com paciente cadastrado</Link></p>}
             {Boolean(linkedBookings?.data?.length) && <ul className="inbox-list">
               {linkedBookings?.data?.map((item) => <li key={item.id}>
                 <Link href={agendaUrl({ clinic: clinic.id, day: localDay(clinic.timezone, new Date(item.starts_at)),

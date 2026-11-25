@@ -85,6 +85,13 @@ A integração opcional consulta horários ocupados para as vagas exibidas na Ag
 
 A chamada FreeBusy envia o ID do calendário e o intervalo de consulta. Ela retorna períodos ocupados. Nomes de pacientes e detalhes dos eventos ficam fora da consulta. Use `npm run test:google` para verificar a integração com respostas simuladas do provedor.
 
+
+## Cadastro de pacientes
+
+Acesse **Pacientes** pela agenda. A ficha tem nome e contatos opcionais, busca por nome e histórico de consultas vinculadas. Pode ser editada, arquivada e reativada pela equipe da clínica. Um cadastro arquivado preserva seu histórico e fica indisponível para novos agendamentos.
+
+Use **Agendar para este paciente** na ficha ou **Agendar com paciente cadastrado** em um atendimento aberto da caixa. A agenda usa o nome do cadastro e grava o vínculo na mesma transação da reserva. Consultas anteriores ao cadastro continuam disponíveis na agenda. O histórico da ficha reúne as reservas vinculadas explicitamente e o nome gravado em cada reserva é preservado.
+
 ## Caixa compartilhada
 
 Acesse **Caixa compartilhada** pelo painel da recepção. Crie um atendimento com um assunto e adicione notas internas. Os membros da mesma clínica podem consultar o histórico, encerrar e reabrir o atendimento. A caixa mostra o tempo desde a entrada ou o retorno à fila e prioriza os mais antigos em **Sem responsável**. A caixa separa os atendimentos em aberto dos encerrados e permite filtrar por origem manual ou WhatsApp em cada fila. A origem também aparece ao lado de cada atendimento. Use **Buscar por assunto** para localizar um trecho do assunto sem distinção entre maiúsculas e minúsculas ou acentos comuns do português. A busca respeita a clínica, a fila, a origem e o filtro de responsável selecionados. Na fila em aberto, filtre por **Meus atendimentos** ou **Sem responsável**, e use **Assumir atendimento** ou **Devolver à fila**. A atribuição é liberada ao encerrar ou remover o vínculo do responsável. O nome do perfil aparece para colegas quando disponível. Nos demais casos, a fila mostra um identificador de atendente. A carga de desenvolvimento inclui um atendimento fictício por clínica. Em uma pilha local existente, aplique a nova migração com `npm run db -- migration up` para preservar os registros atuais.

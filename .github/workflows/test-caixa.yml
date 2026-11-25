@@ -6,6 +6,9 @@ on:
       - 'app/actions.ts'
       - 'app/caixa/**'
       - 'app/grade/**'
+      - 'app/pacientes/**'
+      - 'lib/patients.ts'
+      - 'tests/pacientes.spec.ts'
       - 'lib/grade.ts'
       - 'lib/inbox.ts'
       - 'tests/whatsapp.spec.ts'
@@ -33,6 +36,6 @@ jobs:
       - run: npm run demo -- --env > /dev/null
       - run: npx playwright install --with-deps chromium
       - run: npm run typecheck
-      - run: npm run test:ui -- tests/whatsapp.spec.ts tests/caixa.spec.ts tests/recepcao.spec.ts --workers=1
+      - run: npm run test:ui -- tests/whatsapp.spec.ts tests/caixa.spec.ts tests/recepcao.spec.ts tests/pacientes.spec.ts --workers=1
         env:
           CLINELO_TEST_WHATSAPP: '1'
