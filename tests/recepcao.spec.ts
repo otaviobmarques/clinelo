@@ -255,6 +255,7 @@ test("busca paciente e bloqueia ou devolve uma vaga sem sobrepor consultas", asy
     await enter(page, user);
     await page.goto(`/?day=${date}&professional=${professionalA}`);
     await page.getByRole("link", { name: "Bloquear uma vaga" }).click();
+    await expect(page.getByRole("heading", { name: "Bloquear horário" })).toBeVisible();
     const time = page.getByLabel("Horário");
     await time.selectOption({ label: "08:00 – 08:30" });
     await page.getByLabel("Motivo do bloqueio (opcional)", { exact: true }).fill(reason);
