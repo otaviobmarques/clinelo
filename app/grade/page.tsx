@@ -2,7 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { logout } from "../actions";
 import { saveHours } from "./actions";
-import { agendaUrl, localDay, validDay, type Clinic, type Professional } from "../../lib/agenda";
+import { agendaUrl, localDay, shiftDay, validDay, type Clinic, type Professional } from "../../lib/agenda";
 import { gradeUrl, weekdays } from "../../lib/grade";
 import { supabase, supabaseSettings } from "../../lib/supabase";
 
@@ -73,6 +73,9 @@ export default async function Grade({ searchParams }: { searchParams: Promise<Pa
   const weekday = day ? new Date(day + "T12:00:00Z").getUTCDay() || 7
     : /^[1-7]$/.test(query("weekday")) ? Number(query("weekday")) : 1;
   const today = localDay(clinic.timezone);
+  const through = shiftDay(today, 89);
+  const impactEnd = day || (validDay(through) ? through : "9999-12-31");
+  const dateTime = new Intl.DateTimeFormat("pt-BR", { dateStyle: "short", timeStyle: "short", timeZone: clinic.timezone });
   const formatDay = (value: string) => new Intl.DateTimeFormat("pt-BR", { dateStyle: "short", timeZone: "UTC" })
     .format(new Date(value + "T12:00:00Z"));
   const result = professional ? await client.from("professional_hours")
@@ -80,14 +83,16 @@ export default async function Grade({ searchParams }: { searchParams: Promise<Pa
     .eq("clinic_id", clinic.id).eq("professional_id", professional.id) : null;
   const rows = (result?.data ?? []) as Hours[];
   const weekly = rows.find((row) => row.weekday === weekday);
-  const [dateResult, upcoming] = professional ? await Promise.all([
+  const [dateResult, upcoming, impact] = professional ? await Promise.all([
     day ? client.from("professional_date_hours")
       .select("opens_at,closes_at,break_from,break_until,revision")
       .eq("clinic_id", clinic.id).eq("professional_id", professional.id).eq("day", day).maybeSingle() : null,
     client.from("professional_date_hours").select("day,opens_at,closes_at")
       .eq("clinic_id", clinic.id).eq("professional_id", professional.id).gte("day", today)
       .order("day").limit(15),
-  ]) : [null, null];
+    client.rpc("agenda_outside_hours", { p_clinic: clinic.id, p_professional: professional.id,
+      p_from: day || today, p_through: impactEnd }).limit(26),
+  ]) : [null, null, null];
   const current = day ? dateResult?.data : weekly;
   const displayed = current ?? weekly;
   const notice = query("notice");
@@ -168,6 +173,23 @@ export default async function Grade({ searchParams }: { searchParams: Promise<Pa
               <button className="secondary" name="operation" value="closed" formNoValidate>Fechar o dia</button>
               {current && <button className="secondary" name="operation" value="default" formNoValidate>{day ? "Remover exceção" : "Restaurar padrão"}</button>}
             </form>
+            <section className="grade-impact" aria-labelledby="grade-impact-title">
+              <h3 id="grade-impact-title">Consultas fora da grade</h3>
+              <p className="subtle">{day ? formatDay(day) : "Próximos 90 dias"}</p>
+              {impact?.error ? <p role="alert">Não foi possível verificar as consultas.</p>
+                : !impact?.data?.length ? <p className="empty">Nenhuma consulta futura fora da grade atual.</p>
+                : <ul className="inbox-list">
+                  {impact.data.slice(0, 25).map((item) => {
+                    const starts = new Date(item.starts_at);
+                    return <li key={item.id}>
+                      <Link href={agendaUrl({ clinic: clinic.id, day: localDay(clinic.timezone, starts),
+                        agendaProfessional: item.professional_id }) + "#consulta-" + item.id}>{item.patient_name}</Link>
+                      <p className="subtle">{dateTime.format(starts)}</p>
+                    </li>;
+                  })}
+                </ul>}
+              {impact?.data && impact.data.length > 25 && <p className="subtle">Exibindo as primeiras 25 consultas. Selecione uma data para revisar o restante.</p>}
+            </section>
           </section>
         </div>}
     </main>
