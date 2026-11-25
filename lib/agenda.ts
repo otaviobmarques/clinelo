@@ -17,10 +17,19 @@ export const statusLabels = {
   absent: "Faltou",
 };
 
+export const statusActions = {
+  confirmed: "Confirmar consulta",
+  attended: "Registrar comparecimento",
+  absent: "Registrar falta",
+} as const;
+
 export const messages = {
   booked: "Agendamento criado.",
   moved: "Agendamento remarcado.",
   cancelled: "Agendamento cancelado.",
+  confirmed: "Consulta confirmada.",
+  attended: "Comparecimento registrado.",
+  absent: "Falta registrada.",
   conflict: "O horário acabou de ser ocupado. Escolha outra vaga.",
   changed: "O agendamento já foi alterado. Confira a agenda atualizada.",
   invalid: "Confira os dados e selecione um horário disponível.",

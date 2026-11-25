@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { expect, test, type Page } from "@playwright/test";
-import { clinicA, clinicB, localStack, unwrap, type LocalUser } from "../scripts/local-supabase.mjs";
+import { clinicA, clinicB, professionalA, localStack, unwrap, type LocalUser } from "../scripts/local-supabase.mjs";
 
 async function enter(page: Page, user: LocalUser) {
   await page.goto("/");
@@ -118,6 +118,55 @@ test("filtra a agenda por profissional sem mudar a consulta de vagas", async ({ 
     await expect(visit(marina)).toBeVisible();
   } finally {
     unwrap(await stack.admin.from("appointments").delete().in("patient_name", [marina, lucas]));
+    await stack.removeUser(user);
+  }
+});
+
+test("confirma e registra comparecimento ou falta conforme o horário", async ({ page }) => {
+  const stack = localStack();
+  const user = await stack.user(clinicA, "situacao-agenda");
+  const day = (offset: number) => {
+    const value = new Date();
+    value.setUTCDate(value.getUTCDate() + offset);
+    return value.toISOString().slice(0, 10);
+  };
+  const past = day(-21);
+  const future = day(42);
+  const cases = [
+    { id: randomUUID(), date: future, hour: "11", action: "Confirmar consulta", label: "Confirmado", notice: "Consulta confirmada." },
+    { id: randomUUID(), date: past, hour: "11", action: "Registrar comparecimento", label: "Atendido", notice: "Comparecimento registrado." },
+    { id: randomUUID(), date: past, hour: "12", action: "Registrar falta", label: "Faltou", notice: "Falta registrada." },
+  ];
+  const name = (id: string) => "Paciente fictício " + id;
+
+  try {
+    unwrap(await stack.admin.from("appointments").insert(cases.map(({ id, date, hour }) => ({
+      id, clinic_id: clinicA, professional_id: professionalA, patient_name: name(id),
+      starts_at: `${date}T${hour}:00:00Z`, ends_at: `${date}T${hour}:30:00Z`,
+    }))));
+    const member = stack.client();
+    expect((await member.auth.signInWithPassword({ email: user.email, password: user.password })).error).toBeNull();
+    const payload = { p_clinic: clinicA, p_appointment: cases[0].id, p_revision: 0 };
+    expect((await member.rpc("agenda_set_status", { ...payload, p_status: "absent" })).error?.code).toBe("P0001");
+    expect((await member.rpc("agenda_set_status", { ...payload, p_clinic: clinicB, p_status: "confirmed" })).error?.code).toBe("42501");
+
+    await enter(page, user);
+    for (const item of cases) {
+      await page.goto(`/?day=${item.date}&agendaProfessional=${professionalA}`);
+      const visit = page.getByRole("article").filter({ hasText: name(item.id) });
+      await visit.getByText("Situação da consulta", { exact: true }).click();
+      await visit.getByRole("button", { name: item.action, exact: true }).click();
+      await expect(page.getByRole("status")).toHaveText(item.notice);
+      await expect(visit.getByText(item.label, { exact: true })).toBeVisible();
+      await expect(page.getByRole("combobox", { name: "Profissional da agenda" })).toHaveValue(professionalA);
+    }
+    await expect(page.getByText("1 atendido · 1 falta")).toBeVisible();
+    expect((await member.rpc("agenda_change", { p_clinic: clinicA, p_appointment: cases[0].id,
+      p_revision: 0, p_action: "cancel" })).error?.code).toBe("P0001");
+    expect((await member.rpc("agenda_set_status", { ...payload, p_appointment: cases[1].id, p_revision: 1,
+      p_status: "absent" })).error?.code).toBe("P0001");
+  } finally {
+    unwrap(await stack.admin.from("appointments").delete().in("id", cases.map(({ id }) => id)));
     await stack.removeUser(user);
   }
 });

@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { changeBooking, login, logout } from "./actions";
 import {
-  agendaUrl, localDay, messages, shiftDay, statusLabels, validDay, validId,
+  agendaUrl, localDay, messages, shiftDay, statusActions, statusLabels, validDay, validId,
   type Booking, type Clinic, type Professional, type Slot,
 } from "../lib/agenda";
 import { whatsappConfigured } from "../lib/whatsapp";
@@ -39,7 +39,7 @@ function Integrations({ googleStatus, whatsapp }: { googleStatus: GoogleAvailabi
 
 function Notice({ code }: { code: string }) {
   if (!Object.hasOwn(messages, code)) return null;
-  const success = ["booked", "moved", "cancelled"].includes(code);
+  const success = ["booked", "moved", "cancelled"].includes(code) || Object.hasOwn(statusActions, code);
   return <p className={success ? "notice success" : "notice"} role={success ? "status" : "alert"}>
     {messages[code as keyof typeof messages]}
   </p>;
@@ -122,7 +122,19 @@ export default async function Page({ searchParams }: { searchParams: Promise<Par
   const counts = {
     active: bookings.filter(({ status }) => status === "scheduled" || status === "confirmed").length,
     cancelled: bookings.filter(({ status }) => status === "cancelled").length,
+    attended: bookings.filter(({ status }) => status === "attended").length,
+    absent: bookings.filter(({ status }) => status === "absent").length,
   };
+
+  const now = Date.now();
+  const visitFields = (booking: Booking) => <>
+    <input type="hidden" name="clinic" value={clinic.id} />
+    <input type="hidden" name="day" value={day} />
+    <input type="hidden" name="professional" value={professional?.id ?? ""} />
+    <input type="hidden" name="agendaProfessional" value={agendaProfessional?.id ?? ""} />
+    <input type="hidden" name="appointment" value={booking.id} />
+    <input type="hidden" name="revision" value={booking.revision} />
+  </>;
 
   return <>
     <header className="topbar"><div className="topbar-inner">
@@ -152,7 +164,8 @@ export default async function Page({ searchParams }: { searchParams: Promise<Par
       <div className="columns">
         <section className="card agenda" aria-labelledby="day-title">
           <div className="agenda-head">
-            <div><h2 id="day-title">{dayLabel}</h2><p className="subtle">{counts.active} em aberto · {counts.cancelled} cancelados</p></div>
+            <div><h2 id="day-title">{dayLabel}</h2><p className="subtle">{counts.active} em aberto · {counts.cancelled} cancelados</p>
+              <p className="subtle">{counts.attended} {counts.attended === 1 ? "atendido" : "atendidos"} · {counts.absent} {counts.absent === 1 ? "falta" : "faltas"}</p></div>
             <nav className="date-nav" aria-label="Navegar pela agenda">
               {validDay(shiftDay(day, -1)) && <Link className="secondary button" aria-label="Dia anterior" href={agendaUrl({ ...scope, day: shiftDay(day, -1) })}>‹</Link>}
               <Link className="secondary button" href={agendaUrl({ ...scope, day: today })}>Hoje</Link>
@@ -182,16 +195,23 @@ export default async function Page({ searchParams }: { searchParams: Promise<Par
               <span className={booking.status === "cancelled" ? "tag" : "tag active"}>{statusLabels[booking.status]}</span>
               {["scheduled", "confirmed"].includes(booking.status) && <div className="visit-actions">
                 <Link href={agendaUrl({ ...scope, professional: booking.professional_id, edit: booking.id }) + "#vagas"}>Remarcar</Link>
+                {(booking.status === "scheduled" || Date.parse(booking.starts_at) <= now) && <details>
+                  <summary>Situação da consulta</summary>
+                  <form action={changeBooking} className="visit-status">
+                    {visitFields(booking)}
+                    {booking.status === "scheduled" && Date.parse(booking.ends_at) > now &&
+                      <button className="secondary" name="operation" value="confirmed">{statusActions.confirmed}</button>}
+                    {Date.parse(booking.starts_at) <= now &&
+                      <button className="secondary" name="operation" value="attended">{statusActions.attended}</button>}
+                    {Date.parse(booking.ends_at) <= now &&
+                      <button className="secondary" name="operation" value="absent">{statusActions.absent}</button>}
+                  </form>
+                </details>}
                 <details>
                   <summary>Cancelar</summary>
                   <form action={changeBooking}>
-                    <input type="hidden" name="clinic" value={clinic.id} />
-                    <input type="hidden" name="day" value={day} />
-                    <input type="hidden" name="professional" value={professional?.id ?? ""} />
-                    <input type="hidden" name="agendaProfessional" value={agendaProfessional?.id ?? ""} />
+                    {visitFields(booking)}
                     <input type="hidden" name="operation" value="cancel" />
-                    <input type="hidden" name="appointment" value={booking.id} />
-                    <input type="hidden" name="revision" value={booking.revision} />
                     <button className="danger">Confirmar cancelamento</button>
                   </form>
                 </details>
