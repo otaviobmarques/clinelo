@@ -87,7 +87,7 @@ test("recebe texto assinado, ignora reenvios e isola a caixa da clínica", async
     await page.getByRole("button", { name: "Reabrir atendimento" }).click();
     await expect(page.getByRole("status")).toHaveText("Atendimento reaberto.");
 
-    await page.getByLabel("Assunto").fill(manual);
+    await page.getByLabel("Assunto", { exact: true }).fill(manual);
     await page.getByRole("button", { name: "Criar atendimento" }).click();
     await expect(page.getByRole("status")).toHaveText("Atendimento criado.");
     await expect(origins.getByRole("link", { name: "Manual" })).toHaveAttribute("aria-current", "page");

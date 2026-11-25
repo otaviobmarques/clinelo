@@ -24,7 +24,7 @@ test("compartilha notas entre colegas e isola o atendimento de outras clínicas"
 
     await signIn(page, users[0]);
     await page.getByRole("link", { name: "Caixa compartilhada" }).click();
-    await page.getByLabel("Assunto").fill(subject);
+    await page.getByLabel("Assunto", { exact: true }).fill(subject);
     await page.getByRole("button", { name: "Criar atendimento" }).click();
     await expect(page.getByRole("status")).toHaveText("Atendimento criado.");
     const assignments = page.getByRole("navigation", { name: "Filtrar por responsável" });
