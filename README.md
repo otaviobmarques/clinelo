@@ -13,7 +13,7 @@ npm run demo -- --env
 npm run dev
 ```
 
-Abra [http://localhost:3000](http://localhost:3000) e use uma das duas contas fictícias exibidas pelo comando `demo`. Cada conta pertence a uma clínica diferente. A conta Horizonte pode administrar a grade fictícia. As senhas são geradas localmente a cada execução. Use `npm run demo` para gerar novas contas quando o arquivo `.env.local` já existir. O arquivo contém a URL e a chave pública do ambiente local. A chave administrativa é usada exclusivamente pelos scripts locais de provisionamento e teste.
+Abra [http://localhost:3000](http://localhost:3000) e use uma das duas contas fictícias exibidas pelo comando `demo`. Cada conta pertence a uma clínica diferente. A conta Horizonte pode administrar a grade fictícia. As senhas são geradas localmente a cada execução. Use `npm run demo` para gerar novas contas quando o arquivo `.env.local` já existir. O comando cria `.env.local` depois de provisionar as contas fictícias e preserva qualquer arquivo existente. O arquivo contém a URL e a chave pública do ambiente local. A chave administrativa é usada exclusivamente pelos scripts locais de provisionamento e teste.
 
 A carga inicial inclui três profissionais e consultas fictícias no próximo dia útil a partir da criação do banco. Navegue até esse dia ou selecione outra data e um profissional no formulário de vagas.
 
@@ -130,6 +130,6 @@ Na caixa, abra um atendimento em andamento e escolha **Agendar consulta para est
 ## Preparar um piloto
 
 1. Em um projeto Supabase separado para homologação, aplique as migrações em ordem. Para atualizar a pilha local existente, use `npm run db -- migration up`.
-2. Configure o Next.js com a URL e a chave pública do Supabase do piloto. Provisione usuários pelo Supabase Auth e relacione cada um à clínica em `clinic_members`. A carga de demonstração é destinada ao ambiente local.
+2. Configure o Next.js com a URL e a chave pública do Supabase do piloto. Provisione usuários pelo Supabase Auth e relacione cada um à clínica em `clinic_members`. A carga de demonstração é destinada ao ambiente local. Para o ambiente de homologação, cadastre as clínicas e os profissionais desse ambiente e verifique se o cadastro público de usuários está desabilitado nas configurações do Supabase Auth.
 3. Valide a agenda e a caixa com dados fictícios de duas clínicas. Inclua um agendamento seguido de remarcação e cancelamento, uma reserva a partir da lista de espera e a verificação de que cada conta enxerga somente sua clínica.
 4. Para exercitar integrações, use as instruções de configuração do Google Agenda e do WhatsApp com contas de teste. A consulta ao Google Agenda usa somente disponibilidade. A Agenda do Produto aplica os bloqueios transacionais às reservas locais.
