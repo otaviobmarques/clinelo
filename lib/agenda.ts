@@ -7,6 +7,7 @@ export type Booking = Slot & {
   patient_name: string;
   status: keyof typeof statusLabels;
   revision: number;
+  is_block: boolean;
   inbox_thread_id: string | null;
 };
 
@@ -19,6 +20,7 @@ export const statusLabels = {
 };
 
 export const agendaStatusFilters = {
+  blocked: "Bloqueios ativos",
   open: "Em aberto",
   scheduled: "Agendados",
   confirmed: "Confirmados",
@@ -44,6 +46,8 @@ export const statusActions = {
 } as const;
 
 export const messages = {
+  blocked: "Horário bloqueado.",
+  unblocked: "Bloqueio liberado.",
   booked: "Agendamento criado.",
   moved: "Agendamento remarcado.",
   cancelled: "Agendamento cancelado.",
@@ -81,6 +85,14 @@ export function shiftDay(day: string, offset: number) {
   const date = new Date(day + "T00:00:00Z");
   date.setUTCDate(date.getUTCDate() + offset);
   return date.toISOString().slice(0, 10);
+}
+
+export function agendaPatientQuery(value: string) {
+  return Array.from(value.replaceAll("\0", "").trim()).slice(0, 120).join("");
+}
+
+export function agendaPatientKey(value: string) {
+  return value.normalize("NFD").replace(/\p{M}/gu, "").toLocaleLowerCase("pt-BR");
 }
 
 export function agendaUrl(values: Record<string, string | undefined>) {
