@@ -61,7 +61,8 @@ export default async function Page({ searchParams }: { searchParams: Promise<Par
   const clinicResult = await client.from("clinics").select("id,name,timezone").order("name");
   const clinics = (clinicResult.data ?? []) as Clinic[];
   const requestedClinic = query("clinic");
-  const clinic = clinics.find(({ id }) => id === requestedClinic) ?? clinics[0];
+  const selectedClinic = clinics.find(({ id }) => id === requestedClinic);
+  const clinic = selectedClinic ?? clinics[0];
 
   if (!clinic) return <main className="login-shell"><Brand />
     <section className="card">
@@ -117,9 +118,9 @@ export default async function Page({ searchParams }: { searchParams: Promise<Par
           <button className="secondary">Abrir</button>
         </form>
       </div>
-      <Notice code={query("notice")} />
-      {requestedClinic && requestedClinic !== clinic.id && query("notice") !== "forbidden" &&
-        <p className="notice" role="alert">Você não tem acesso à clínica solicitada.</p>}
+      {requestedClinic && !selectedClinic
+        ? <p className="notice" role="alert">Você não tem acesso à clínica solicitada.</p>
+        : <Notice code={query("notice")} />}
       {(staff.error || agenda.error || target?.error || slotResult?.error) &&
         <p className="notice" role="alert">Parte da agenda está indisponível. Atualize a página para tentar novamente.</p>}
       {edit && !moving && !target?.error &&
@@ -165,7 +166,7 @@ export default async function Page({ searchParams }: { searchParams: Promise<Par
           <section className="card booking-card" id="vagas" aria-labelledby="booking-title">
             <h2 id="booking-title">{moving ? "Remarcar consulta" : "Novo agendamento"}</h2>
             {moving && <p className="subtle">{moving.patient_name} · <Link href={agendaUrl({ ...scope, edit: undefined })}>Sair da remarcação</Link></p>}
-            <form method="get" className="filters" key={agendaUrl(scope)}>
+            <form method="get" className="filters" key={`filters-${agendaUrl(scope)}`}>
               <input type="hidden" name="clinic" value={clinic.id} />
               {moving && <input type="hidden" name="edit" value={moving.id} />}
               <label>Data<input type="date" name="day" defaultValue={day} required /></label>
@@ -175,7 +176,7 @@ export default async function Page({ searchParams }: { searchParams: Promise<Par
               </select></label>
               <button className="secondary">Consultar vagas</button>
             </form>
-            {professional && !slotResult?.error && <form action={changeBooking} className="booking-form" key={agendaUrl(scope)}>
+            {professional && !slotResult?.error && <form action={changeBooking} className="booking-form" key={`booking-${agendaUrl(scope)}`}>
               <input type="hidden" name="clinic" value={clinic.id} />
               <input type="hidden" name="day" value={day} />
               <input type="hidden" name="professional" value={professional.id} />
