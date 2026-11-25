@@ -21,7 +21,7 @@ jobs:
           cache: npm
       - uses: supabase/setup-cli@v1
         with:
-          version: latest
+          version: 2.39.2
       - run: npm ci
       - run: npm run db -- start
       - run: npm run demo -- --env > /dev/null
